@@ -28,23 +28,18 @@ def apply_engineer(df, state):
 
 
 # ---------------------------------------------------------------------------
-# Worked example if you use quartile bands. Edges come from TRAIN ONLY, which
-# is what fit_engineer is for; apply_engineer then cuts any dataframe with them.
-#
-# BAND_COLS = ["Adult_mortality", "Under_five_deaths", "Incidents_HIV"]
+# If your engineering needs a value calculated across many rows (a median, a
+# set of quantile edges), that value is what fit_engineer returns, and
+# apply_engineer reads it back out of `state` rather than recalculating:
 #
 # def fit_engineer(train_df):
-#     edges = {}
-#     for col in BAND_COLS:
-#         e = list(train_df[col].quantile([0, .25, .5, .75, 1]).values)
-#         e[0], e[-1] = -np.inf, np.inf
-#         edges[col] = e
-#     return edges
+#     return {"some_column": <value calculated from train_df["some_column"]>}
 #
 # def apply_engineer(df, state):
 #     df = df.copy()
-#     df["log_GDP"] = np.log(df["GDP_per_capita"])
-#     for col in BAND_COLS:
-#         df[col + "_band"] = pd.cut(df[col], state[col], labels=False)
+#     df["some_column_derived"] = <use state["some_column"] on df["some_column"]>
 #     return df
+#
+# The app predicts from a single row, so a quantile cannot be recalculated at
+# predict time - that is the whole reason for the two-step split.
 # ---------------------------------------------------------------------------
