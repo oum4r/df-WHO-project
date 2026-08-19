@@ -10,14 +10,20 @@ runs, so keep them as you wrote them.
 import numpy as np
 import pandas as pd
 
+import statsmodels.api as sm
+
 
 # ===========================================================================
 # MINIMAL  -  no sensitive data at all
-# Owner:
+# Owner: Bradley H.
 # ===========================================================================
 MINIMAL = {
     "label": "Minimal model",
-    "features": [],          # TODO your final column list, after engineering
+    "features": ['Schooling', 'GDP_per_capita_log', 'Region_Asia',
+       'Region_Central America and Caribbean', 'Region_South America', 'Year',
+       'Region_Rest of Europe', 'Region_European Union', 'Region_Middle East',
+       'Region_Oceania', 'Region_North America', 'Economy_status_Developed',
+       'Economy_status_Developing', 'GDP_per_capita'],          # TODO your final column list, after engineering
     "band_cols": [],         # not a banded model, leave empty
 }
 
@@ -29,29 +35,55 @@ def minimal_fit(train_df):
 def minimal_apply(df, state):
     df = df.copy()
     # TODO your transforms (log, drops, ...)
-    return df
+
+    df['GDP_per_capita_log'] = np.log(df['GDP_per_capita'])
+
+    df = df[MINIMAL['features']]
+
+    return df.astype(float)
 
 
 # ===========================================================================
 # COARSE  -  sensitive measures shared as ranges, never exact figures
-# Owner:
+# Owner: Bradley H.
 # ===========================================================================
 COARSE = {
     "label": "Ranges model",
-    "features": [],          # TODO your final list, band columns included
-    "band_cols": [],         # TODO raw columns you banded, e.g. ["Adult_mortality"]
+    "features": ['Year', 'Population_mln', 'Schooling', 'Adult_mortality',
+       'Under_five_deaths', 'Incidents_HIV', 'Region_Asia',
+       'Region_Central America and Caribbean', 'Region_European Union',
+       'Region_Middle East', 'Region_North America', 'Region_Oceania',
+       'Region_Rest of Europe', 'Region_South America', 'GDP_per_capita_log'],          # TODO your final list, band columns included
+    "band_cols": ['Adult_mortality', 'Under_five_deaths', 'Incidents_HIV'],         # TODO raw columns you banded, e.g. ["Adult_mortality"]
 }
 
 
-def coarse_fit(train_df):
-    return {}                # TODO your quartile edges, from train_df only
+def coarse_fit(train_df:pd.DataFrame) -> dict:
+    state = {'edges':{}}
+
+    for col in COARSE['band_cols']:
+        edges = list(train_df[col].quantile([0,.25,.5,.75,1]).values)
+        edges[0], edges[-1] = -np.inf, np.inf
+        state['edges'][col] = edges
+
+    return state                # TODO your quartile edges, from train_df only
 
 
-def coarse_apply(df, state):
+def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
     df = df.copy()
     # TODO your transforms. Bands MUST be guarded with `if col in df.columns:`
     # (see the note at the bottom) or the app will fail on a single input row.
-    return df
+
+    df['GDP_per_capita_log'] = np.log(df['GDP_per_capita'])
+    df.drop('GDP_per_capita', axis=1, inplace=True)
+
+    for col in COARSE['band_cols']:
+        edges = state['edges'][col]
+        df[col] = pd.cut(df[col], edges, labels=False)
+
+    df = df[COARSE['features']]
+
+    return df.astype(float)
 
 
 # ===========================================================================
