@@ -93,23 +93,23 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 FULL = {
     "label": "Full model",
     # sel from the elaborate notebook: stepwise on p-values cut 25 columns to
-    # these 15. Test RMSE 1.2174 vs 1.2160 all-features baseline.
+    # these 15, . Test RMSE 1.1404 vs RMSE 1.1313 for all features.
     "features": [
-        "Infant_deaths",
+        "Under_five_deaths",
         "Adult_mortality",
-        "Economy_status_Developing",
+        "Infant_deaths_log",
         "Region_Central America and Caribbean",
         "Region_South America",
-        "Under_five_deaths",
-        "GDP_per_capita_log",
-        "Region_Oceania",
+        "Economy_status_Developing",
         "Region_European Union",
-        "Schooling",
-        "BMI",
+        "Region_Oceania",
+        "Region_Asia",
+        "Region_North America",
+        "Incidents_HIV",
         "Year",
         "Hepatitis_B",
-        "Incidents_HIV",
-        "Polio",
+        "BMI",
+        "GDP_per_capita_log",
     ],
     "band_cols": [],         # not a banded model, leave empty
 }
@@ -121,10 +121,14 @@ def full_fit(train_df):
 def full_apply(df, state):
     df = df.copy()
 
-    # add_gdp_log from the notebook. 
+    # add_gdp_log, infant_deaths_log. 
     if "GDP_per_capita" in df.columns:
         df["GDP_per_capita_log"] = np.log(df["GDP_per_capita"])
         df = df.drop(columns=["GDP_per_capita"])
+
+    if "Infant_deaths" in df.columns:
+        df["Infant_deaths_log"] = np.log(df["Infant_deaths"])
+        df = df.drop(columns=["Infant_deaths"])
 
     return df
 
