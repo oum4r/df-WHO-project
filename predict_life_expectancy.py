@@ -156,13 +156,6 @@ MODELS = {
 }
 
 
-MODELS = {
-    "minimal": {**MINIMAL, "fit": minimal_fit, "apply": minimal_apply},
-    "coarse": {**COARSE, "fit": coarse_fit, "apply": coarse_apply},
-    "full": {**FULL, "fit": full_fit, "apply": full_apply},
-}
-
-
 # --- PROMPTS ---
 PROMPTS = {
     "Year": "Year (2000-2015): ",
