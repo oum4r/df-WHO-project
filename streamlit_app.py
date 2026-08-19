@@ -259,15 +259,16 @@ section(tab_meth, "Method", "How the model was built",
 tab_meth.markdown(f"""
 | Candidate model | Inputs | Typical error, training | Typical error, held-out |
 |---|---|---|---|
-| Every candidate input | 25 | 1.18 years | 1.22 years |
-| Dropped by correlation, by hand | 22 | 1.20 years | 1.23 years |
-| Pruned by variance inflation (VIF) | 12 | 2.78 years | 2.83 years |
-| **Stepwise selection, used by this app** | **15** | **1.19 years** | **{err_full:.2f} years** |
+| Every candidate input | 25 | 1.06 years | 1.07 years |
+| Dropped by correlation, by hand | 22 | 1.07 years | 1.09 years |
+| Pruned by variance inflation (VIF) | 15 | 1.08 years | 1.09 years |
+| **Stepwise selection, used by this app** | **16** | **1.06 years** | **{err_full:.2f} years** |
 """)
 tab_meth.caption("Every input we removed was judged on held-out error rather than assumed. VIF is a "
-                 "standard test for inputs that duplicate each other; here it pruned too hard and "
-                 "landed behind the 1.8-year benchmark set by the rival contractor team. Stepwise "
-                 "selection matched the full model using 15 of 25 inputs. Error is root mean squared "
+                 "standard test for inputs that duplicate each other; here it removed an input the "
+                 "held-out data said was worth keeping. Stepwise selection matched the full model "
+                 "using 16 of 25 inputs, comfortably inside the 1.8-year benchmark set by the "
+                 "rival contractor team. Error is root mean squared "
                  "error (RMSE), reproduced in the analysis notebook.")
 
 section(tab_meth, "Investigation", "What the data showed, and what we did about it",
@@ -280,26 +281,26 @@ tab_meth.markdown("""
 | Infant and under-five deaths move as one (r = 0.99): the second contains the first | Flagged as duplicates, then let selection decide. It kept both | Nothing: each still adds signal |
 | Diphtheria and polio immunisation move together (r = 0.95) | Selection kept polio and dropped diphtheria: with two near-identical columns it keeps whichever enters first | Nothing measurable |
 | The two child-thinness measures move together (r = 0.94) | Selection rejected both | Nothing measurable |
-| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: 1.22 to 1.25 years |
+| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: 1.08 to 1.15 years |
 | Filled values: measles reads 64 in 17% of records, coverage never exceeds 99 | Kept, but flagged. Predictions are fine; those coefficients are not causes | Nothing measurable |
 """)
 tab_meth.caption("Correlation alone was never the deciding tool. It only sees pairs, it does not say "
                  "which of a pair to keep, and it cannot measure what a drop costs.")
 
-section(tab_meth, "Selection", "How the 15 inputs were chosen",
+section(tab_meth, "Selection", "How the 16 inputs were chosen",
         "Two standard tools were run on the training data, and they disagreed.")
 tab_meth.markdown("""
 |  | Stepwise selection | Variance inflation (VIF) |
 |---|---|---|
 | **The question it asks** | Does this input earn its place? | Does this input repeat another? |
 | **How it decides** | Adds the strongest, drops any that stop earning their place | Removes anything scoring above 5 |
-| **Inputs kept** | 15 of 25 | 12 of 25 |
-| **What it removed** | Measles, alcohol, population, diphtheria, both thinness measures, four region flags | Adult mortality and schooling, the two strongest predictors in the data |
-| **Typical error** | **1.22 years** | 2.83 years |
+| **Inputs kept** | 16 of 25 | 15 of 25 |
+| **What it removed** | Measles, polio, diphtheria, population, GDP per capita, both thinness measures, two region flags | Infant deaths, which the held-out data says is worth keeping |
+| **Typical error** | **1.08 years** | 1.09 years |
 | **Verdict** | **Shipped** | Rejected |
 """)
-tab_meth.caption("The weakest input stepwise kept, polio immunisation, still clears the "
-                 "significance bar at p = 0.01, so nothing in the shipped model is borderline. "
+tab_meth.caption("The weakest input stepwise kept, hepatitis B immunisation, still clears the "
+                 "significance bar at p = 0.002, so nothing in the shipped model is borderline. "
                  "Neither tool answers the question that actually matters, which is whether "
                  "removing an input makes predictions worse, so every candidate set was refitted "
                  "and scored on records the models had never seen.")
@@ -310,18 +311,18 @@ tab_perf.markdown(
     '<div class="prov">'
     f'<div><span class="prov-k">Typical error</span><span class="prov-v">{err_full:.2f} years on '
     'records the model never saw</span></div>'
-    '<div><span class="prov-k">Country never seen</span><span class="prov-v">1.25 years, holding '
+    '<div><span class="prov-k">Country never seen</span><span class="prov-v">1.15 years, holding '
     'out whole countries</span></div>'
     '<div><span class="prov-k">Differences explained</span><span class="prov-v">98% of the variation '
     'between countries</span></div>'
-    '<div><span class="prov-k">Stability</span><span class="prov-v">1.20 &plusmn; 0.03 years across '
+    '<div><span class="prov-k">Stability</span><span class="prov-v">1.07 &plusmn; 0.03 years across '
     'five refits</span></div>'
     '</div>'
     '<p class="sec-intro">Held-out records share countries with the training data, so as a stricter '
     'check the split was repeated with whole countries held out: typical error for a country the '
-    'model has <strong>never seen</strong> rises only from 1.22 to <strong>1.25 years</strong>. '
+    'model has <strong>never seen</strong> rises only from 1.08 to <strong>1.15 years</strong>. '
     'The model learned relationships between indicators, not the identities of particular '
-    'countries. Every one of the 15 inputs earns its place statistically (p &lt; 0.05).</p>',
+    'countries. Every one of the 16 inputs earns its place statistically (p &lt; 0.05).</p>',
     unsafe_allow_html=True)
 # equal width and height: a parity plot only reads correctly when the
 # "perfect prediction" line sits at 45 degrees
@@ -394,10 +395,10 @@ Schooling, and eight region flags. No health data of any kind.
 eight region flags, plus adult mortality, under-five deaths and HIV incidence given as quartile
 positions rather than measured values. Quartile boundaries are learned from the training data only.
 
-**Full model (15 inputs):** Infant deaths, Under-five deaths, Adult mortality, Economy status,
-GDP per capita (log-transformed), Schooling, BMI, Year, HIV incidence, Hepatitis B and Polio
-immunization, and four region flags (Central America & Caribbean, European Union, Oceania,
-South America).
+**Full model (16 inputs):** Infant deaths (log-transformed), Under-five deaths, Adult mortality
+(square-root transformed), Economy status, Schooling, BMI, Year, HIV incidence, Alcohol
+consumption, Hepatitis B immunization, and six region flags (Asia, Central America & Caribbean,
+European Union, North America, Oceania, South America).
 
 Some source columns (e.g. Measles, HIV incidence) contain pre-filled/placeholder values in parts
 of the original dataset, so treat any single feature's effect on the prediction with caution:
