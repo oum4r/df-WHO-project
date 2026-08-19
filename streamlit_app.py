@@ -130,12 +130,13 @@ def section(target, step, heading, intro=""):
 
 
 def band_options(edges):
-    """Readable quartile choices, e.g. "Second quarter (106 to 164)"."""
-    fmt = (lambda v: f"{v:,.2f}") if edges[3] < 10 else (lambda v: f"{v:,.0f}")
-    return [f"Lowest quarter (under {fmt(edges[1])})",
-            f"Second quarter ({fmt(edges[1])} to {fmt(edges[2])})",
-            f"Third quarter ({fmt(edges[2])} to {fmt(edges[3])})",
-            f"Highest quarter (over {fmt(edges[3])})"]
+    """Readable range choices, built from however many bands the model uses."""
+    fmt = (lambda v: f"{v:,.2f}") if edges[-2] < 10 else (lambda v: f"{v:,.0f}")
+    n = len(edges) - 1
+    out = [f"Lowest {n}th (under {fmt(edges[1])})"]
+    out += [f"{fmt(edges[i])} to {fmt(edges[i + 1])}" for i in range(1, n - 1)]
+    out.append(f"Highest {n}th (over {fmt(edges[-2])})")
+    return out
 
 
 st.set_page_config(page_title="Meridian · Life expectancy estimator", layout="wide",
@@ -205,7 +206,7 @@ else:
         "Would you share ranges instead of exact figures?",
         options=RANGE_OPTIONS, index=1,
         captions=[f"Typically within {err_crs:.2f} years", f"Typically within {err_min:.2f} years"],
-        help="A range means the quarter your country falls in, not the measured figure.",
+        help="A range means the band your country falls in, not the measured figure.",
         horizontal=True,
     )
     tier = "coarse" if ranges.startswith("Yes") else "minimal"
@@ -236,7 +237,7 @@ with tab_est.form("predict_form"):
 
     band_answers = {}
     if plan["bands"]:
-        st.markdown('<p class="sec-intro">Which quarter of the range does your country fall in? No exact figure is entered or stored.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="sec-intro">Which range does your country fall in? No exact figure is entered or stored.</p>', unsafe_allow_html=True)
         slots = st.columns(len(plan["bands"]), gap="medium")
         for slot, colname in zip(slots, plan["bands"]):
             middle = model_info["middles"][colname]
@@ -389,7 +390,7 @@ tab_meth.altair_chart(
     ).configure_view(strokeOpacity=0),
     use_container_width=True)
 tab_meth.caption("Shorter bar means a more accurate estimate. Sharing more raises accuracy sharply "
-                 "at first: naming the quarter a country falls in, rather than the measured figure, "
+                 "at first: naming the band a country falls in, rather than the measured figure, "
                  "recovers most of the gain for a fraction of the disclosure. All three tiers are "
                  "offered by the estimator.")
 
