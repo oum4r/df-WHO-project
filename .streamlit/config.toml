@@ -1,0 +1,24 @@
+# Meridian life expectancy estimator: theme tokens.
+# Palette from WHO Brand Guidelines.md. Interaction blue is Deep blue #007EB4
+# rather than #009ADE: white text on #009ADE is only 3.15:1, which fails the
+# WCAG 2.1 AA 4.5:1 rule the brand doc adopts in section 5. #007EB4 gives
+# 4.52:1. WHO Blue #0093D5 is kept for identity marks only (top rule, result
+# card edge), where the 3:1 non-text threshold applies.
+
+[theme]
+base = "light"
+primaryColor = "#007EB4"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F5F5"
+textColor = "#00205C"
+linkColor = "#007EB4"
+borderColor = "#D5DBE6"
+font = "Noto Sans"
+headingFont = "Noto Serif"
+baseRadius = "small"
+buttonRadius = "small"
+
+[client]
+# hides the Deploy button and hamburger menu at the server level, so the
+# chrome is gone even before the CSS in inject_css() applies
+toolbarMode = "minimal"

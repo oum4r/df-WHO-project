@@ -1,0 +1,131 @@
+/* AI Assisted Code */
+/* WHO Life Expectancy Estimator stylesheet. Palette and type rules: WHO Brand Guidelines.md */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&family=Noto+Serif:wght@600;700&display=swap');
+
+/* ---- tokens (contrast ratios on white in comments) ------------ */
+:root {
+    --who-blue: #0093D5;   /* identity only: rules, result edge; 3.4:1 */
+    --action:   #007EB4;   /* interaction; 4.5:1 with white text */
+    --ink:      #00205C;   /* 15.4:1 */   --ink-mid:  #45577D;  /* 7.2:1 */
+    --ink-soft: #5C6F94;   /* 5.1:1  */   --line-2:   #6E7C99;  /* 4.2:1, controls */
+    --line: rgba(0, 32, 92, 0.13);
+    --sans:  "Noto Sans", Arial, Helvetica, sans-serif;
+    --serif: "Noto Serif", Georgia, "Times New Roman", serif;
+}
+
+/* ---- strip Streamlit chrome (1.51 test ids) ------------------ */
+/* Deploy button and hamburger are already gone via toolbarMode="minimal" in
+   config.toml. The header and toolbar must STAY: they hold the button that
+   reopens a collapsed sidebar. Painted out rather than removed. */
+[data-testid="stAppDeployButton"], [data-testid="stMainMenu"],
+[data-testid="stStatusWidget"], #MainMenu, footer { display: none !important; }
+[data-testid="stHeader"], [data-testid="stToolbar"] { background: transparent !important; }
+/* flat brand rule (replaces the old blue-to-blue gradient bar) */
+[data-testid="stAppViewContainer"]::before { content: ""; position: fixed; top: 0;
+    left: 0; right: 0; height: 3px; background: var(--who-blue); z-index: 1000; }
+[data-testid="stMainBlockContainer"] { max-width: 54rem; padding: 2.5rem 3rem 3.25rem; }
+
+/* ---- sidebar: identity only, logo leads ---------------------- */
+[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid var(--line); }
+[data-testid="stSidebarHeader"] { padding-bottom: 0; }
+[data-testid="stSidebarUserContent"] { padding: 0 1.4rem 2rem; }
+[data-testid="stSidebar"] h1.title { font-size: 2.125rem; }
+[data-testid="stSidebar"] .lockup { gap: 0.65rem; margin: 0 0 0.35rem; }
+[data-testid="stSidebar"] .lockup svg { width: 42px; height: 42px; flex: 0 0 42px; }
+[data-testid="stSidebar"] .sub { font-size: 0.9375rem; margin-bottom: 0; }
+[data-testid="stSidebar"] .prov { grid-template-columns: 1fr; gap: 0.9rem; border-bottom: none;
+    margin: 1.5rem 0 0; padding-bottom: 0; }
+[data-testid="stSidebar"] .prov-v { font-size: 0.8125rem; }
+html, body, [data-testid="stAppViewContainer"] { font-family: var(--sans); }
+
+/* ---- one shared eyebrow/label treatment ---------------------- */
+.eyebrow, .prov-k, [data-testid="stMetricLabel"] p,
+[data-testid="stExpander"] summary p { font-family: var(--sans) !important;
+    font-weight: 700 !important; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-soft) !important; }
+.eyebrow, .prov-k, [data-testid="stMetricLabel"] p { font-size: 0.6875rem !important; }
+
+/* ---- masthead ------------------------------------------------ */
+.eyebrow { line-height: 1.4; letter-spacing: 0.11em; margin: 0 0 0.75rem; }
+.lockup { display: flex; align-items: center; gap: 0.8rem; margin: 0 0 0.35rem; }
+.lockup svg { flex: 0 0 auto; }
+h1.title { font: 700 2.375rem/1.15 var(--serif); color: var(--ink); letter-spacing: -0.015em; margin: 0; }
+.sub { font: 400 1rem/1.5 var(--sans); color: var(--ink-soft); margin: 0 0 1rem; }
+p.lead { font: 400 1.0625rem/1.65 var(--sans); color: var(--ink-mid); max-width: 34em; margin: 0; }
+
+/* ---- provenance: stat grid ----------------------------------- */
+.prov { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 2rem;
+    padding: 1.15rem 0 1.05rem; margin: 2rem 0 0.5rem; }
+.prov-k { display: block; line-height: 1.5; margin-bottom: 0.2rem; }
+.prov-v { display: block; font: 400 0.875rem/1.5 var(--sans); color: var(--ink-mid); }
+
+/* ---- section headers ----------------------------------------- */
+.sec { margin: 2.75rem 0 0.25rem; }
+.sec h2 { font: 600 1.5rem/1.25 var(--serif); color: var(--ink); margin: 0 0 0.5rem; padding: 0; }
+/* specificity beats Streamlit's own paragraph rule, which otherwise wins */
+[data-testid="stMarkdownContainer"] p.sec-intro, .sec-intro {
+    font-family: var(--sans); font-size: 0.9375rem; font-weight: 400; line-height: 1.6;
+    color: var(--ink-mid); max-width: 40em; margin: 0 0 0.4rem; }
+.sec-intro + .sec-intro { margin-top: 0.8rem; }
+/* bold inside muted text must return to full strength, or emphasis reads as dimmer */
+.sec-intro strong, [data-testid="stTabs"] table td strong { color: var(--ink); }
+
+/* ---- widgets: quiet, no nested boxes ------------------------- */
+[data-testid="stForm"] { border: none !important; padding: 0 !important; background: none !important; }
+[data-testid="stForm"] label p, [data-testid="stRadio"] label p {
+    font: 600 0.875rem/1.5 var(--sans) !important; color: var(--ink) !important; }
+[data-testid="stRadio"] > label p { font-weight: 600 !important; font-size: 0.9375rem !important; max-width: 44em; }
+[data-testid="stRadioGroup"] label p { font-weight: 400 !important; color: var(--ink-mid) !important; }
+/* help icon hugs the label text instead of floating to the far edge */
+label[data-testid="stWidgetLabel"] { width: fit-content !important; gap: 0.4rem; }
+/* horizontal option pair, caption sits under its own option */
+[role="radiogroup"] { gap: 0.4rem 3rem !important; align-items: flex-start; }
+[data-testid="stNumberInputContainer"], [data-baseweb="select"] > div { border-color: var(--line-2) !important; }
+[data-testid="stFormSubmitButton"] button { background: var(--action); color: #FFFFFF;
+    border: 1px solid var(--action); font: 600 0.9375rem/1 var(--sans);
+    padding: 0.8rem 1.5rem; margin-top: 0.5rem; }
+[data-testid="stFormSubmitButton"] button:hover { background: var(--ink); border-color: var(--ink); }
+
+/* ---- the one elevated element: the result -------------------- */
+[data-testid="stMetric"] { background: #FFFFFF; border: 1px solid var(--line);
+    border-top: 4px solid var(--who-blue); border-radius: 12px; padding: 1.4rem 1.6rem 1.5rem;
+    box-shadow: 0 2px 6px rgba(0, 32, 92, 0.07); margin-top: 1.75rem; }
+[data-testid="stMetricValue"] { font: 600 2.75rem/1.15 var(--serif); color: var(--ink); }
+
+/* ---- tabs: quiet eyebrow-style labels, WHO-blue highlight ---- */
+/* slightly larger and darker than a section eyebrow, so navigation outranks a marker */
+[data-testid="stTabs"] [data-baseweb="tab-list"] button p { font: 700 0.75rem/1.4 var(--sans) !important;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-mid) !important; }
+[data-testid="stTabs"] [data-baseweb="tab-list"] button[aria-selected="true"] p { color: var(--action) !important; }
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { background-color: var(--who-blue); }
+[data-testid="stTabs"] [data-baseweb="tab-border"] { background-color: var(--line); }
+/* horizontal rules only: a full grid is heavy to read at presenting distance */
+[data-testid="stTabs"] table { width: 100%; border-collapse: collapse;
+    font: 400 0.9375rem/1.5 var(--sans); color: var(--ink-mid); margin: 0.3rem 0 0.2rem; }
+[data-testid="stTabs"] table th, [data-testid="stTabs"] table td {
+    border: none !important; border-bottom: 1px solid var(--line) !important;
+    padding: 0.65rem 1.1rem 0.65rem 0; text-align: left; vertical-align: top; }
+[data-testid="stTabs"] table th { color: var(--ink); font-weight: 700;
+    border-bottom: 1px solid var(--line-2) !important; }
+[data-testid="stTabs"] table tr:last-child td { border-bottom: none !important; }
+
+/* ---- captions, expander, footer ------------------------------ */
+[data-testid="stCaptionContainer"] { opacity: 1 !important; }
+[data-testid="stCaptionContainer"] p { font: 400 0.8125rem/1.6 var(--sans) !important;
+    color: var(--ink-mid) !important; opacity: 1 !important; }
+[data-testid="stExpander"] { margin-top: 1.5rem; }
+[data-testid="stExpander"] details { border: none !important; border-radius: 0 !important;
+    border-top: 1px solid var(--line) !important; background: none !important; }
+[data-testid="stExpander"] summary, [data-testid="stExpanderDetails"] { padding-left: 0 !important; }
+[data-testid="stExpander"] summary p { font-size: 0.8125rem !important; letter-spacing: 0.04em; }
+[data-testid="stExpanderDetails"] p, [data-testid="stExpanderDetails"] li { font: 400 0.875rem/1.65 var(--sans); color: var(--ink-mid); }
+[data-testid="stExpanderDetails"] strong { color: var(--ink); }
+.foot { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1rem;
+    font: 400 0.6875rem/1.6 var(--sans); font-size: 0.6875rem !important; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+    [data-testid="stMainBlockContainer"] { padding: 1.5rem 1.1rem 2.5rem; }
+    h1.title { font-size: 2.125rem; }
+}
