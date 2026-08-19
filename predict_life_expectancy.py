@@ -110,23 +110,25 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 FULL = {
     "label": "Full model",
     # sel from the elaborate notebook: stepwise on p-values cut 25 columns to
-    # these 15. Test RMSE 1.2174 vs 1.2160 all-features baseline.
+    # these 16, with Infant_deaths logged and Adult_mortality square-rooted
+    # (see full_apply). Test RMSE 1.0756 vs 1.0650 all-features baseline.
     "features": [
-        "Infant_deaths",
         "Adult_mortality",
-        "Economy_status_Developing",
+        "Under_five_deaths",
+        "Alcohol_consumption",
         "Region_Central America and Caribbean",
         "Region_South America",
-        "Under_five_deaths",
-        "GDP_per_capita_log",
+        "Economy_status_Developing",
+        "BMI",
+        "Schooling",
+        "Incidents_HIV",
+        "Region_North America",
+        "Infant_deaths",
         "Region_Oceania",
         "Region_European Union",
-        "Schooling",
-        "BMI",
         "Year",
+        "Region_Asia",
         "Hepatitis_B",
-        "Incidents_HIV",
-        "Polio",
     ],
     "band_cols": [],         # not a banded model, leave empty
 }
@@ -138,10 +140,17 @@ def full_fit(train_df):
 def full_apply(df, state):
     df = df.copy()
 
-    # add_gdp_log from the notebook. 
-    if "GDP_per_capita" in df.columns:
-        df["GDP_per_capita_log"] = np.log(df["GDP_per_capita"])
-        df = df.drop(columns=["GDP_per_capita"])
+    # Transformed in place rather than into _log / _sqrt columns: the prompt
+    # loop below builds its questions from "features" and only special-cases
+    # GDP_per_capita_log, so a renamed column would be asked for as a raw input.
+
+    # right-skewed count (skew 1.10 -> -0.23 logged); needs a value > 0
+    if "Infant_deaths" in df.columns:
+        df["Infant_deaths"] = np.log(df["Infant_deaths"])
+
+    
+    if "Adult_mortality" in df.columns:
+        df["Adult_mortality"] = np.sqrt(df["Adult_mortality"])
 
     return df
 
@@ -172,6 +181,7 @@ PROMPTS = {
     "Schooling": "Average years of schooling: ",
     "Infant_deaths": "Infant deaths (per 1,000 live births): ",
     "Under_five_deaths": "Under-five deaths (per 1,000 live births): ",
+    "Alcohol_consumption": "Alcohol consumption (litres per capita): ",
     "Adult_mortality": "Adult mortality (per 1,000 population): ",
     "BMI": "Average BMI: ",
     "Incidents_HIV": "HIV incidence (per 1,000 population): ",
