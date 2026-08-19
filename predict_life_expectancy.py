@@ -19,7 +19,8 @@ import os
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.model_selection import KFold, LeaveOneGroupOut, train_test_split
 from statsmodels.tools.eval_measures import rmse
 
 CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Life Expectancy Data.csv")
@@ -215,6 +216,46 @@ def fit_model(spec, df):
 
 DATA = load_data()
 TRAINED = {name: fit_model(spec, DATA) for name, spec in MODELS.items()}
+
+
+def evaluate(name="full"):
+    """Performance figures for one model, computed on demand.
+
+    Not run on import: the leave-one-country-out pass refits 179 times, which
+    is fine for a cached call from the app but would slow the console script.
+    """
+    spec, trained = MODELS[name], TRAINED[name]
+    X = DATA.drop(columns=["Life_expectancy"])
+    y = DATA["Life_expectancy"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    def design(rows, state):
+        return sm.add_constant(spec["apply"](rows, state)[spec["features"]].astype(float),
+                               has_constant="add")
+
+    pred = trained["model"].predict(design(X_test, trained["state"]))
+
+    cv = []
+    for tr, va in KFold(5, shuffle=True, random_state=42).split(X_train):
+        a, b = X_train.iloc[tr], X_train.iloc[va]
+        st = spec["fit"](a)
+        m = sm.OLS(y_train.iloc[tr], design(a, st)).fit()
+        cv.append(rmse(y_train.iloc[va], m.predict(design(b, st))))
+
+    loco = []
+    for tr, te in LeaveOneGroupOut().split(X, y, groups=DATA["Country"]):
+        a, b = X.iloc[tr], X.iloc[te]
+        st = spec["fit"](a)
+        m = sm.OLS(y.iloc[tr], design(a, st)).fit()
+        loco.append(rmse(y.iloc[te], m.predict(design(b, st))))
+    loco = np.array(loco)
+
+    return {"rmse": trained["rmse"], "r2": r2_score(y_test, pred),
+            "mae": mean_absolute_error(y_test, pred),
+            "cv_mean": float(np.mean(cv)), "cv_sd": float(np.std(cv)),
+            "loco_mean": float(loco.mean()), "loco_median": float(np.median(loco)),
+            "loco_under_1": int((loco < 1.0).sum()), "loco_n": len(loco),
+            "n_features": len(spec["features"])}
 
 
 # --- CONSOLE PREDICTION ---

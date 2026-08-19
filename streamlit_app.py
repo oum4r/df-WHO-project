@@ -21,7 +21,7 @@ from statsmodels.tools.eval_measures import rmse
 # --- MODELS ---
 # predict_life_expectancy.py is the backend: it holds the team's model specs,
 # trains all three, and provides the console version of the same prediction.
-from predict_life_expectancy import MODELS, TRAINED, DATA, REGIONS, BAND_COLS
+from predict_life_expectancy import MODELS, TRAINED, DATA, REGIONS, BAND_COLS, evaluate
 
 FORM_INTRO = {"minimal": "basic figures only, nothing sensitive",
               "coarse": "basic figures, plus a range for each sensitive measure",
@@ -108,6 +108,13 @@ def load_data_and_models():
     }
 
 
+@st.cache_resource
+def live_metrics():
+    """Cached call into the backend's evaluate(); the app does no modelling itself."""
+    return evaluate("full")
+
+
+
 def inject_css():
     """Load the stylesheet from style.css (palette and type per WHO Brand Guidelines.md)."""
     css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style.css")
@@ -135,6 +142,7 @@ st.set_page_config(page_title="Meridian · Life expectancy estimator", layout="w
                    initial_sidebar_state="expanded")
 inject_css()
 data = load_data_and_models()
+metrics = live_metrics()
 stats = data["stats"]
 prov = data["provenance"]
 fitted = data["fitted"]
@@ -279,9 +287,9 @@ tab_meth.markdown("""
 |---|---|---|
 | Economy status recorded twice, as exact opposites (r = &minus;1.00) | Kept one. Two columns carrying one fact break the regression | Nothing, and unavoidable |
 | Infant and under-five deaths move as one (r = 0.99): the second contains the first | Flagged as duplicates, then let selection decide. It kept both | Nothing: each still adds signal |
-| Diphtheria and polio immunisation move together (r = 0.95) | Selection kept polio and dropped diphtheria: with two near-identical columns it keeps whichever enters first | Nothing measurable |
+| Diphtheria and polio immunisation move together (r = 0.95) | Selection rejected both once mortality was in the model | Nothing measurable |
 | The two child-thinness measures move together (r = 0.94) | Selection rejected both | Nothing measurable |
-| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: 1.08 to 1.15 years |
+| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: 1.22 to 1.25 years |
 | Filled values: measles reads 64 in 17% of records, coverage never exceeds 99 | Kept, but flagged. Predictions are fine; those coefficients are not causes | Nothing measurable |
 """)
 tab_meth.caption("Correlation alone was never the deciding tool. It only sees pairs, it does not say "
@@ -311,18 +319,22 @@ tab_perf.markdown(
     '<div class="prov">'
     f'<div><span class="prov-k">Typical error</span><span class="prov-v">{err_full:.2f} years on '
     'records the model never saw</span></div>'
-    '<div><span class="prov-k">Country never seen</span><span class="prov-v">1.15 years, holding '
-    'out whole countries</span></div>'
-    '<div><span class="prov-k">Differences explained</span><span class="prov-v">98% of the variation '
-    'between countries</span></div>'
-    '<div><span class="prov-k">Stability</span><span class="prov-v">1.07 &plusmn; 0.03 years across '
-    'five refits</span></div>'
+    f'<div><span class="prov-k">Country never seen</span><span class="prov-v">{metrics["loco_mean"]:.2f} '
+    'years, leave-one-country-out</span></div>'
+    f'<div><span class="prov-k">Differences explained</span><span class="prov-v">{metrics["r2"] * 100:.0f}% '
+    'of the variation between countries</span></div>'
+    f'<div><span class="prov-k">Stability</span><span class="prov-v">{metrics["cv_mean"]:.2f} &plusmn; '
+    f'{metrics["cv_sd"]:.2f} years across five refits</span></div>'
     '</div>'
     '<p class="sec-intro">Held-out records share countries with the training data, so as a stricter '
-    'check the split was repeated with whole countries held out: typical error for a country the '
-    'model has <strong>never seen</strong> rises only from 1.08 to <strong>1.15 years</strong>. '
-    'The model learned relationships between indicators, not the identities of particular '
-    'countries. Every one of the 16 inputs earns its place statistically (p &lt; 0.05).</p>',
+    'check, the model was refit with one whole country held out at a time (leave-one-country-out, '
+    f'{metrics["loco_n"]} refits): typical error for a country the model has <strong>never '
+    f'seen</strong> averages <strong>{metrics["loco_mean"]:.2f} years</strong> '
+    f'({metrics["loco_under_1"]} of {metrics["loco_n"]} countries score under a year of error), '
+    f'close to the {err_full:.2f} years measured on the ordinary held-out split (mean absolute '
+    f'error {metrics["mae"]:.2f} years). The model learned relationships between indicators, not '
+    f'the identities of particular countries. Every one of the {metrics["n_features"]} inputs earns '
+    'its place statistically (p &lt; 0.05).</p>',
     unsafe_allow_html=True)
 # equal width and height: a parity plot only reads correctly when the
 # "perfect prediction" line sits at 45 degrees
@@ -396,9 +408,8 @@ eight region flags, plus adult mortality, under-five deaths and HIV incidence gi
 positions rather than measured values. Quartile boundaries are learned from the training data only.
 
 **Full model (16 inputs):** Infant deaths (log-transformed), Under-five deaths, Adult mortality
-(square-root transformed), Economy status, Schooling, BMI, Year, HIV incidence, Alcohol
-consumption, Hepatitis B immunization, and six region flags (Asia, Central America & Caribbean,
-European Union, North America, Oceania, South America).
+(square-root transformed), Economy status, Schooling, BMI, Year, HIV incidence, Hepatitis B
+immunization, Alcohol consumption, and six region flags. GDP per capita was not selected.
 
 Some source columns (e.g. Measles, HIV incidence) contain pre-filled/placeholder values in parts
 of the original dataset, so treat any single feature's effect on the prediction with caution:
