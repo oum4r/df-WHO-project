@@ -77,9 +77,10 @@ COARSE = {
 
 def coarse_fit(train_df:pd.DataFrame) -> dict:
     state = {'edges':{}}
+    bands = 10
 
     for col in COARSE['band_cols']:
-        edges = list(train_df[col].quantile([0,.25,.5,.75,1]).values)
+        edges = list(train_df[col].quantile([x/bands for x in range(bands+1)]).values)
         edges[0], edges[-1] = -np.inf, np.inf
         state['edges'][col] = edges
 
