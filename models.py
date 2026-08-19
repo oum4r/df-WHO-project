@@ -88,22 +88,44 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 
 # ===========================================================================
 # FULL  -  exact figures, used only with consent
-# Owner:
+# Owner: Harun
 # ===========================================================================
 FULL = {
     "label": "Full model",
-    "features": [],          # TODO your final column list
+    # sel from the elaborate notebook: stepwise on p-values cut 25 columns to
+    # these 15. Test RMSE 1.2174 vs 1.2160 all-features baseline.
+    "features": [
+        "Infant_deaths",
+        "Adult_mortality",
+        "Economy_status_Developing",
+        "Region_Central America and Caribbean",
+        "Region_South America",
+        "Under_five_deaths",
+        "GDP_per_capita_log",
+        "Region_Oceania",
+        "Region_European Union",
+        "Schooling",
+        "BMI",
+        "Year",
+        "Hepatitis_B",
+        "Incidents_HIV",
+        "Polio",
+    ],
     "band_cols": [],         # not a banded model, leave empty
 }
 
 
 def full_fit(train_df):
-    return {}
-
+    return {}                
 
 def full_apply(df, state):
     df = df.copy()
-    # TODO your transforms, or just return df unchanged
+
+    # add_gdp_log from the notebook. 
+    if "GDP_per_capita" in df.columns:
+        df["GDP_per_capita_log"] = np.log(df["GDP_per_capita"])
+        df = df.drop(columns=["GDP_per_capita"])
+
     return df
 
 
