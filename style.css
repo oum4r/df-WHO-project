@@ -255,3 +255,6 @@ label[data-testid="stWidgetLabel"] { width: fit-content !important; gap: 0.4rem;
     [data-testid="stMainBlockContainer"] { padding: 1.5rem 1.1rem 2.5rem; }
     h1.title { font-size: 2.125rem; }
 }
+
+/* estimator tab: form reads better narrow while the page stays wide */
+div[role="tabpanel"][id$="-tabpanel-0"] { max-width: 48rem; }
