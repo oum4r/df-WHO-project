@@ -23,6 +23,11 @@ from statsmodels.tools.eval_measures import rmse
 # trains all three, and provides the console version of the same prediction.
 from predict_life_expectancy import MODELS, TRAINED, DATA, REGIONS, evaluate
 
+# cache key: any change to the backend file invalidates the cached models and metrics
+import hashlib
+BACKEND_SIG = hashlib.md5(open(os.path.join(os.path.dirname(__file__),
+    "predict_life_expectancy.py"), "rb").read()).hexdigest()
+
 FORM_INTRO = {"minimal": "basic figures only, nothing sensitive",
               "coarse": "basic figures, plus a range for each sensitive measure",
               "full": "exact figures for the full model"}
@@ -70,7 +75,7 @@ def form_plan(spec):
 
 
 @st.cache_resource
-def load_data_and_models():
+def load_data_and_models(backend_sig):
     df = DATA
     provenance = {"countries": int(df["Country"].nunique()), "records": int(len(df)),
                   "year_min": int(df["Year"].min()), "year_max": int(df["Year"].max())}
@@ -110,7 +115,7 @@ def load_data_and_models():
 
 
 @st.cache_resource
-def live_metrics():
+def live_metrics(backend_sig):
     """Cached call into the backend's evaluate(); the app does no modelling itself."""
     return evaluate("full")
 
@@ -143,11 +148,8 @@ def band_options(edges):
 st.set_page_config(page_title="Meridian · Life expectancy estimator", layout="wide",
                    initial_sidebar_state="expanded")
 inject_css()
-data = load_data_and_models()
-metrics = live_metrics()
-if "loco_pooled" not in metrics:  # cache from an older evaluate() survived a deploy
-    live_metrics.clear()
-    metrics = live_metrics()
+data = load_data_and_models(BACKEND_SIG)
+metrics = live_metrics(BACKEND_SIG)
 stats = data["stats"]
 prov = data["provenance"]
 fitted = data["fitted"]
