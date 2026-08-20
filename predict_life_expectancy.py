@@ -85,7 +85,7 @@ def coarse_fit(train_df:pd.DataFrame) -> dict:
         edges[0], edges[-1] = -np.inf, np.inf
         state['edges'][col] = edges
 
-    return state                # TODO your quartile edges, from train_df only
+    return state                # TODO your band edges, from train_df only
 
 
 def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
@@ -184,6 +184,9 @@ PROMPTS = {
     "Polio": "Polio immunization coverage (%): ",
 }
 
+# logged downstream, so these must be collected strictly above zero
+LOG_INPUTS = {"GDP_per_capita", "Infant_deaths"}
+
 
 # --- TRAINING ---
 def load_data():
@@ -203,13 +206,13 @@ def fit_model(spec, df):
     test_fe = sm.add_constant(spec["apply"](X_test, state)[spec["features"]].astype(float), has_constant="add")
     model = sm.OLS(y_train, train_fe).fit()
 
-    # middle value of each quarter: sent instead of a band number so the model's
-    # own pd.cut lands it back in the quarter the user picked
+    # middle value of each band: sent instead of a band number so the model's
+    # own pd.cut lands it back in the band the user picked
     middles = {}
     for col in spec["band_cols"]:
         edges = state["edges"][col]
-        quarter = pd.cut(X_train[col], edges, labels=False)
-        middles[col] = {"edges": edges, "value": X_train.groupby(quarter)[col].median().to_dict()}
+        band = pd.cut(X_train[col], edges, labels=False)
+        middles[col] = {"edges": edges, "value": X_train.groupby(band)[col].median().to_dict()}
 
     return {"model": model, "state": state, "rmse": rmse(y_test, model.predict(test_fe)), "middles": middles}
 
@@ -242,43 +245,99 @@ def evaluate(name="full"):
         m = sm.OLS(y_train.iloc[tr], design(a, st)).fit()
         cv.append(rmse(y_train.iloc[va], m.predict(design(b, st))))
 
-    loco = []
+    # loco holds one RMSE per country; all_sq holds every squared error, so the
+    # pooled figure is like for like with the random-split rmse above
+    loco, all_sq = [], []
     for tr, te in LeaveOneGroupOut().split(X, y, groups=DATA["Country"]):
         a, b = X.iloc[tr], X.iloc[te]
         st = spec["fit"](a)
         m = sm.OLS(y.iloc[tr], design(a, st)).fit()
-        loco.append(rmse(y.iloc[te], m.predict(design(b, st))))
+        held = m.predict(design(b, st))
+        all_sq.extend(np.square(y.iloc[te] - held))
+        loco.append(rmse(y.iloc[te], held))
     loco = np.array(loco)
 
+    country_mean = y_train.groupby(X_train["Country"]).mean()
+    naive_rmse = rmse(y_test, X_test["Country"].map(country_mean))
+
     return {"rmse": trained["rmse"], "r2": r2_score(y_test, pred),
+            "baseline_country_mean": float(naive_rmse),
             "mae": mean_absolute_error(y_test, pred),
             "cv_mean": float(np.mean(cv)), "cv_sd": float(np.std(cv)),
             "loco_mean": float(loco.mean()), "loco_median": float(np.median(loco)),
+            "loco_pooled": float(np.sqrt(np.mean(all_sq))),
             "loco_under_1": int((loco < 1.0).sum()), "loco_n": len(loco),
             "n_features": len(spec["features"])}
 
 
 # --- CONSOLE PREDICTION ---
+def _ask_float(prompt, positive=False):
+    """A number, re-asked until it parses (and is above zero when logged later)."""
+    while True:
+        try:
+            value = float(input(prompt))
+        except ValueError:
+            print("  Please enter a number.")
+            continue
+        if positive and value <= 0:
+            print("  Please enter a number above zero.")
+            continue
+        return value
+
+
+def _ask_choice(prompt, n):
+    """A whole number from 1 to n, re-asked until valid."""
+    while True:
+        try:
+            choice = int(input(prompt))
+        except ValueError:
+            choice = 0
+        if 1 <= choice <= n:
+            return choice
+        print(f"  Please enter a number from 1 to {n}.")
+
+
+def _ask_yes_no(prompt):
+    """Y/N in any casing, re-asked until valid."""
+    while True:
+        answer = input(prompt).strip().lower()
+        if answer in ("y", "yes"):
+            return True
+        if answer in ("n", "no"):
+            return False
+        print("  Please answer Y or N.")
+
+
+def _ask_region():
+    """A region name matched case-insensitively, returned in its canonical casing."""
+    canonical = {r.lower(): r for r in REGIONS}
+    while True:
+        answer = input(f"\nRegion ({', '.join(REGIONS)}): ").strip().lower()
+        if answer in canonical:
+            return canonical[answer]
+        print("  Please enter one of the regions listed.")
+
+
 def _ask_band(col, middle):
-    """Ask which quarter the country falls in, and return a value inside it."""
+    """Ask which band the country falls in, and return a value inside it."""
     e = middle["edges"]
-    fmt = (lambda v: f"{v:,.2f}") if e[3] < 10 else (lambda v: f"{v:,.0f}")
-    print(f"\n{PROMPTS[col].strip(': ')}, which quarter?")
-    print(f"  1  Lowest quarter (under {fmt(e[1])})")
-    print(f"  2  Second quarter ({fmt(e[1])} to {fmt(e[2])})")
-    print(f"  3  Third quarter ({fmt(e[2])} to {fmt(e[3])})")
-    print(f"  4  Highest quarter (over {fmt(e[3])})")
-    return middle["value"][int(input("  Choose 1-4: ")) - 1]
+    n = len(e) - 1
+    fmt = (lambda v: f"{v:,.2f}") if e[-2] < 10 else (lambda v: f"{v:,.0f}")
+    print(f"\n{PROMPTS[col].strip(': ')}, which band?")
+    print(f"  1  Lowest {n}th (under {fmt(e[1])})")
+    for i in range(1, n - 1):
+        print(f"  {i + 1}  {fmt(e[i])} to {fmt(e[i + 1])}")
+    print(f"  {n}  Highest {n}th (over {fmt(e[-2])})")
+    return middle["value"][_ask_choice(f"  Choose 1-{n}: ", n) - 1]
 
 
 def predict_life_expectancy():
-    consent = input("Do you consent to using advanced population data, which may include "
-                    "protected information, for better accuracy? (Y/N)").strip().upper()
-    if consent == "Y":
+    if _ask_yes_no("Do you consent to using advanced population data, which may include "
+                   "protected information, for better accuracy? (Y/N)"):
         tier = "full"
     else:
-        ranges = input("Would you share ranges instead of exact figures? (Y/N)").strip().upper()
-        tier = "coarse" if ranges == "Y" else "minimal"
+        ranges = _ask_yes_no("Would you share ranges instead of exact figures? (Y/N)")
+        tier = "coarse" if ranges else "minimal"
 
     spec, trained = MODELS[tier], TRAINED[tier]
     print(f"\nUsing the {spec['label'].lower()}.")
@@ -290,12 +349,13 @@ def predict_life_expectancy():
         if col in spec["band_cols"]:
             row[col] = _ask_band(col, trained["middles"][col])
         else:
-            row[col] = float(input(PROMPTS[col]))
+            row[col] = _ask_float(PROMPTS[col], positive=col in LOG_INPUTS)
 
-    if "GDP_per_capita" not in row:
-        row["GDP_per_capita"] = float(input(PROMPTS["GDP_per_capita"]))
+    # only the models that log GDP need it, and only if the loop above missed it
+    if "GDP_per_capita_log" in spec["features"] and "GDP_per_capita" not in row:
+        row["GDP_per_capita"] = _ask_float(PROMPTS["GDP_per_capita"], positive=True)
 
-    region = input(f"\nRegion ({', '.join(REGIONS)}): ").strip()
+    region = _ask_region()
     for dummy in ALL_REGION_DUMMIES:
         row[dummy] = 1.0 if dummy == f"Region_{region}" else 0.0
 

@@ -21,7 +21,7 @@ from statsmodels.tools.eval_measures import rmse
 # --- MODELS ---
 # predict_life_expectancy.py is the backend: it holds the team's model specs,
 # trains all three, and provides the console version of the same prediction.
-from predict_life_expectancy import MODELS, TRAINED, DATA, REGIONS, BAND_COLS, evaluate
+from predict_life_expectancy import MODELS, TRAINED, DATA, REGIONS, evaluate
 
 FORM_INTRO = {"minimal": "basic figures only, nothing sensitive",
               "coarse": "basic figures, plus a range for each sensitive measure",
@@ -91,13 +91,14 @@ def load_data_and_models():
     scatter = pd.DataFrame({"actual": y_test.values,
                             "predicted": fitted["full"]["model"].predict(
                                 design(X_test, "full")).values})
-    ex_rows = X_test[X_test["Year"] == 2015].head(3)
+    ex_names = ["Japan", "Tunisia", "Benin"]  # recognisable test-set countries spanning the range
+    ex_rows = X_test[(X_test["Year"] == 2015) & (X_test["Country"].isin(ex_names))]
     examples = pd.DataFrame({
         "Country": ex_rows["Country"].values,
         "Actual 2015": y_test.loc[ex_rows.index].round(1).values,
         "Full model": fitted["full"]["model"].predict(design(ex_rows, "full")).round(1).values,
         "Minimal model": fitted["minimal"]["model"].predict(design(ex_rows, "minimal")).round(1).values,
-    })
+    }).sort_values("Actual 2015", ascending=False)
 
     return {
         "fitted": fitted,
@@ -150,6 +151,7 @@ fitted = data["fitted"]
 err_full = fitted["full"]["rmse"]
 err_min = fitted["minimal"]["rmse"]
 err_crs = fitted["coarse"]["rmse"]
+loco_pooled = metrics["loco_pooled"]
 
 # identity and provenance live in the sidebar; the main area is the two tabs
 st.sidebar.markdown(
@@ -255,11 +257,14 @@ if submitted:
 
     engineered = spec["apply"](pd.DataFrame([row]), model_info["state"])
     X_new = sm.add_constant(engineered[spec["features"]].astype(float), has_constant="add")
-    prediction = float(model_info["model"].predict(X_new).iloc[0])
+    interval = model_info["model"].get_prediction(X_new).summary_frame(alpha=0.05)
+    prediction = float(interval["mean"].iloc[0])
+    give_take = float(interval["obs_ci_upper"].iloc[0] - interval["obs_ci_lower"].iloc[0]) / 2
 
     section(tab_est, "Step 3", "Your estimate")
     tab_est.metric("Predicted life expectancy", f"{prediction:.1f} years")
-    tab_est.caption(f"{spec['label']} · the true value is typically within {model_info['rmse']:.2f} years of this estimate (held-out test data)")
+    tab_est.caption(f"{spec['label']} · give or take {give_take:.1f} years (the range that holds 95% of "
+                    f"true values) · typical miss {model_info['rmse']:.2f} years on held-out test data")
 
 
 section(tab_meth, "Method", "How the model was built",
@@ -283,14 +288,14 @@ tab_meth.caption("Every input we removed was judged on held-out error rather tha
 section(tab_meth, "Investigation", "What the data showed, and what we did about it",
         "Every drop below started as an observation in the data, not a preference. None was "
         "acted on until the cost had been measured on held-out records.")
-tab_meth.markdown("""
+tab_meth.markdown(f"""
 | What we found | What we did | What it cost |
 |---|---|---|
 | Economy status recorded twice, as exact opposites (r = &minus;1.00) | Kept one. Two columns carrying one fact break the regression | Nothing, and unavoidable |
 | Infant and under-five deaths move as one (r = 0.99): the second contains the first | Flagged as duplicates, then let selection decide. It kept both | Nothing: each still adds signal |
 | Diphtheria and polio immunisation move together (r = 0.95) | Selection rejected both once mortality was in the model | Nothing measurable |
 | The two child-thinness measures move together (r = 0.94) | Selection rejected both | Nothing measurable |
-| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: 1.22 to 1.25 years |
+| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: pooled error {loco_pooled:.2f} vs {err_full:.2f} on a random split |
 | Filled values: measles reads 64 in 17% of records, coverage never exceeds 99 | Kept, but flagged. Predictions are fine; those coefficients are not causes | Nothing measurable |
 """)
 tab_meth.caption("Correlation alone was never the deciding tool. It only sees pairs, it does not say "
@@ -322,20 +327,25 @@ tab_perf.markdown(
     'records the model never saw</span></div>'
     f'<div><span class="prov-k">Country never seen</span><span class="prov-v">{metrics["loco_mean"]:.2f} '
     'years, leave-one-country-out</span></div>'
-    f'<div><span class="prov-k">Differences explained</span><span class="prov-v">{metrics["r2"] * 100:.0f}% '
+    f'<div><span class="prov-k">Differences explained</span><span class="prov-v">{metrics["r2"]:.1%} '
     'of the variation between countries</span></div>'
     f'<div><span class="prov-k">Stability</span><span class="prov-v">{metrics["cv_mean"]:.2f} &plusmn; '
     f'{metrics["cv_sd"]:.2f} years across five refits</span></div>'
     '</div>'
     '<p class="sec-intro">Held-out records share countries with the training data, so as a stricter '
     'check, the model was refit with one whole country held out at a time (leave-one-country-out, '
-    f'{metrics["loco_n"]} refits): typical error for a country the model has <strong>never '
-    f'seen</strong> averages <strong>{metrics["loco_mean"]:.2f} years</strong> '
-    f'({metrics["loco_under_1"]} of {metrics["loco_n"]} countries score under a year of error), '
-    f'close to the {err_full:.2f} years measured on the ordinary held-out split (mean absolute '
-    f'error {metrics["mae"]:.2f} years). The model learned relationships between indicators, not '
-    f'the identities of particular countries. Every one of the {metrics["n_features"]} inputs earns '
-    'its place statistically (p &lt; 0.05).</p>',
+    f'{metrics["loco_n"]} refits). For a country the model has <strong>never seen</strong>, the '
+    f'average country scores <strong>{metrics["loco_mean"]:.2f} years</strong> of error '
+    f'(median {metrics["loco_median"]:.2f}); pooled across every prediction it is '
+    f'<strong>{loco_pooled:.2f} years</strong>, barely above the {err_full:.2f} years measured on '
+    f'the ordinary random split (mean absolute error {metrics["mae"]:.2f} years), and '
+    f'{metrics["loco_under_1"]} of {metrics["loco_n"]} countries score under a year of error. The '
+    'model learned relationships between indicators, not the identities of particular countries. '
+    f'For scale, guessing each country from its own historical average would miss by '
+    f'<strong>{metrics["baseline_country_mean"]:.2f} years</strong>; the model misses by {err_full:.2f}. '
+    f'Every one of the {metrics["n_features"]} inputs earns its place statistically (p &lt; 0.05). '
+    'The percentage above is R&sup2;, and most of the variation it rewards is difference between '
+    'countries, so the leave-one-country-out check is the harder test.</p>',
     unsafe_allow_html=True)
 # equal width and height: a parity plot only reads correctly when the
 # "perfect prediction" line sits at 45 degrees
@@ -405,8 +415,9 @@ estimator offers three levels of disclosure and shows what each one costs in acc
 Schooling, and eight region flags. No health data of any kind.
 
 **Ranges model (15 inputs):** Year, Population, Schooling, GDP per capita (log-transformed),
-eight region flags, plus adult mortality, under-five deaths and HIV incidence given as quartile
-positions rather than measured values. Quartile boundaries are learned from the training data only.
+eight region flags, plus adult mortality, under-five deaths and HIV incidence given as decile
+positions (tenths of the training distribution) rather than measured values. Decile boundaries are
+learned from the training data only.
 
 **Full model (16 inputs):** Infant deaths (log-transformed), Under-five deaths, Adult mortality
 (square-root transformed), Economy status, Schooling, BMI, Year, HIV incidence, Hepatitis B

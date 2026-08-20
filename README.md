@@ -9,8 +9,8 @@ shows what each one costs in accuracy.
 
 | Tier | What a state shares | Typical error |
 |---|---|---|
-| Full | exact health figures | 1.22 years |
-| Ranges | which quarter it falls in, not the figure | 2.90 years |
+| Full | exact health figures | 1.08 years |
+| Ranges | which tenth (decile band) it falls in, not the figure | 2.38 years |
 | Minimal | basic economic and demographic figures only | 4.52 years |
 
 The competitor benchmark to beat was 1.8 years.
@@ -34,6 +34,7 @@ python predict_life_expectancy.py  # the console version
 | `Life Expectancy Data.csv` | WHO dataset, 2,864 records, 179 countries, 2000 to 2015 |
 | `notebooks/WHO LEAST Notebook.ipynb` | analysis behind the minimal and ranges models |
 | `notebooks/WHO ELABORATE Notebook.ipynb` | analysis behind the full model |
+| `notebooks/WHO ELABORATE Notebook - Extended Stats.ipynb` | the same analysis plus residual diagnostics and a held-out test report |
 | `notebooks/WHO Base Notebook.ipynb` | shared exploratory analysis |
 
 Model specifications live in `predict_life_expectancy.py`, one block per model
