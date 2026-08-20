@@ -112,8 +112,8 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 FULL = {
     "label": "Full model",
     # sel from the elaborate notebook: stepwise on p-values cut 25 columns to
-    # these 16, with Infant_deaths logged and Adult_mortality square-rooted
-    # (see full_apply). Test RMSE 1.0756 vs 1.0650 all-features baseline.
+    # these 16, selected by stepwise with Infant_deaths and Population_mln
+    # logged and Adult_mortality square-rooted first (see full_apply).
     "features": [
         "Adult_mortality",
         "Under_five_deaths",
@@ -130,7 +130,7 @@ FULL = {
         "Region_European Union",
         "Year",
         "Region_Asia",
-        "Hepatitis_B",
+        "Population_mln",
     ],
     "band_cols": [],         # not a banded model, leave empty
 }
@@ -153,6 +153,10 @@ def full_apply(df, state):
     
     if "Adult_mortality" in df.columns:
         df["Adult_mortality"] = np.sqrt(df["Adult_mortality"])
+
+    # raw population is near-worthless to the model; logged it earns its place
+    if "Population_mln" in df.columns:
+        df["Population_mln"] = np.log(df["Population_mln"])
 
     return df
 
@@ -185,7 +189,7 @@ PROMPTS = {
 }
 
 # logged downstream, so these must be collected strictly above zero
-LOG_INPUTS = {"GDP_per_capita", "Infant_deaths"}
+LOG_INPUTS = {"GDP_per_capita", "Infant_deaths", "Population_mln"}
 
 
 # --- TRAINING ---

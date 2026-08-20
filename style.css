@@ -10,6 +10,7 @@
     --ink:      #00205C;   /* 15.4:1 */   --ink-mid:  #45577D;  /* 7.2:1 */
     --ink-soft: #5C6F94;   /* 5.1:1  */   --line-2:   #6E7C99;  /* 4.2:1, controls */
     --line: rgba(0, 32, 92, 0.13);
+    --grid: #EBEEF4;       /* unfilled track behind a proportion bar */
     --sans:  "Noto Sans", Arial, Helvetica, sans-serif;
     --serif: "Noto Serif", Georgia, "Times New Roman", serif;
 }
@@ -24,7 +25,8 @@
 /* flat brand rule (replaces the old blue-to-blue gradient bar) */
 [data-testid="stAppViewContainer"]::before { content: ""; position: fixed; top: 0;
     left: 0; right: 0; height: 3px; background: var(--who-blue); z-index: 1000; }
-[data-testid="stMainBlockContainer"] { max-width: 54rem; padding: 2.5rem 3rem 3.25rem; }
+/* 60rem, not 54: four stats in a row and the 420px parity plot need the width */
+[data-testid="stMainBlockContainer"] { max-width: 60rem; padding: 2.5rem 3rem 3.25rem; }
 
 /* ---- sidebar: identity only, logo leads ---------------------- */
 [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid var(--line); }
@@ -124,6 +126,46 @@ label[data-testid="stWidgetLabel"] { width: fit-content !important; gap: 0.4rem;
 [data-testid="stExpanderDetails"] strong { color: var(--ink); }
 .foot { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1rem;
     font: 400 0.6875rem/1.6 var(--sans); font-size: 0.6875rem !important; color: var(--ink-soft); }
+
+/* ---- methodology and performance bands ----------------------- */
+/* Three type sizes plus the shared micro label: the display number (.num),
+   the section heading, and body copy. Grouping is whitespace and one hairline
+   per row, so the cells themselves carry no fill and no border. */
+.lab { display: block; font: 700 0.6875rem/1.4 var(--sans); letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-soft); margin: 0 0 0.5rem; }
+.lab.hd { margin-bottom: 0.9rem; }
+.num { display: block; font: 600 2.5rem/1.05 var(--serif); color: var(--ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
+.num .u { font: 600 0.875rem/1 var(--sans); color: var(--ink-mid);
+    letter-spacing: 0; margin-left: 0.35rem; }
+.stat .sub { display: block; font: 400 0.8125rem/1.5 var(--sans);
+    color: var(--ink-mid); margin-top: 0.55rem; }
+
+/* one hairline per stat row, on the keyed container rather than the cells, so
+   it runs unbroken behind the column gaps */
+[class*="st-key-statrow"] { border-top: 1px solid var(--line); padding-top: 1.35rem; }
+/* the hero pair is the only oversized number on a tab: emphasis capped at two */
+[class*="st-key-statrowhero"] .num { font-size: 3.5rem; }
+[class*="st-key-statrowhero"] .stat.off .num { color: var(--ink-soft); }
+
+/* circularity chain: labels and arrows on one line, hairline top and bottom */
+.strip { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1.1rem;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.7rem 0; }
+.strip .lab { margin: 0; color: var(--ink); }
+.strip .op { font: 400 0.875rem/1 var(--sans); color: var(--line-2); }
+
+/* share of countries under a year of error: one filled bar, two readouts */
+.split { display: flex; height: 30px; background: var(--grid); }
+.split i { display: block; height: 100%; background: var(--ink); }
+.splitk { display: flex; justify-content: space-between; margin-top: 0.55rem;
+    font: 400 0.8125rem/1.5 var(--sans); color: var(--ink-mid); }
+
+/* worked examples beside the parity plot: one hairline row per country */
+.excard { border-top: 1px solid var(--line); padding: 0.7rem 0 0.8rem; }
+.excard .lab { color: var(--ink); margin-bottom: 0.3rem; }
+.exline { font: 400 0.875rem/1.5 var(--sans); color: var(--ink-mid);
+    font-variant-numeric: tabular-nums; }
+.exline b { color: var(--ink); font-weight: 600; }
 
 @media (max-width: 640px) {
     [data-testid="stMainBlockContainer"] { padding: 1.5rem 1.1rem 2.5rem; }

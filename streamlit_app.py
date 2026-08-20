@@ -63,6 +63,9 @@ def field_label(col):
 CONSENT_OPTIONS = ["Yes, use the full health dataset", "No, not exact figures"]
 RANGE_OPTIONS = ["Yes, share ranges", "No, basic figures only"]
 
+TARGET = 1.8      # the rival contractor's benchmark, the bar this model has to clear
+CANDIDATES = 25   # candidate columns offered to feature selection
+
 
 def form_plan(spec):
     """Which questions the form asks, derived from the model's own feature list."""
@@ -105,12 +108,18 @@ def load_data_and_models(backend_sig):
         "Minimal model": fitted["minimal"]["model"].predict(design(ex_rows, "minimal")).round(1).values,
     }).sort_values("Actual 2015", ascending=False)
 
+    # the "give or take" a single prediction carries: half the width of the 95%
+    # prediction interval, averaged over the test set
+    bounds = fitted["full"]["model"].get_prediction(design(X_test, "full")).summary_frame(alpha=0.05)
+    give_take = float(((bounds["obs_ci_upper"] - bounds["obs_ci_lower"]) / 2).mean())
+
     return {
         "fitted": fitted,
         "stats": stats,
         "provenance": provenance,
         "scatter": scatter,
         "examples": examples,
+        "give_take": give_take,
     }
 
 
@@ -130,9 +139,29 @@ def inject_css():
 
 def section(target, step, heading, intro=""):
     """Eyebrow + serif heading + optional short intro line."""
+    step_html = f'<p class="eyebrow">{step}</p>' if step else ""
     intro_html = f'<p class="sec-intro">{intro}</p>' if intro else ""
-    target.markdown(f'<div class="sec"><p class="eyebrow">{step}</p><h2>{heading}</h2>{intro_html}</div>',
+    target.markdown(f'<div class="sec">{step_html}<h2>{heading}</h2>{intro_html}</div>',
                     unsafe_allow_html=True)
+
+
+def stat(label, value, unit="", sub="", muted=False):
+    """One stat cell: micro label, display number, optional unit and sub-line."""
+    unit_html = f'<span class="u">{unit}</span>' if unit else ""
+    sub_html = f'<span class="sub">{sub}</span>' if sub else ""
+    return (f'<div class="stat{" off" if muted else ""}"><span class="lab">{label}</span>'
+            f'<span class="num">{value}{unit_html}</span>{sub_html}</div>')
+
+
+def stat_row(target, cells, key, hero=False):
+    """A row of stats: one column per cell, grouped by whitespace and one hairline.
+
+    The rule sits on the keyed container rather than on each cell, so it runs
+    unbroken across the column gaps. No fills, no borders around the cells.
+    """
+    with target.container(key=f'{"statrowhero" if hero else "statrow"}_{key}'):
+        for slot, cell in zip(st.columns(len(cells), gap="large"), cells):
+            slot.markdown(cell, unsafe_allow_html=True)
 
 
 def band_options(edges):
@@ -157,6 +186,11 @@ err_full = fitted["full"]["rmse"]
 err_min = fitted["minimal"]["rmse"]
 err_crs = fitted["coarse"]["rmse"]
 loco_pooled = metrics["loco_pooled"]
+full_model = fitted["full"]["model"]
+train_err = float(np.sqrt(full_model.ssr / full_model.nobs))  # training-set RMSE, for the candidate table
+# the input the shipped model leans on least, named and scored from the fit itself
+weakest_input = str(full_model.pvalues.drop("const").idxmax()).replace("_", " ")
+weakest_p = float(full_model.pvalues.drop("const").max())
 
 # identity and provenance live in the sidebar; the main area is the two tabs
 st.sidebar.markdown(
@@ -197,7 +231,7 @@ consent = tab_est.radio(
         "You choose what you can share next",
     ],
     help="Advanced population data means mortality, disease and health-system indicators "
-         "(adult mortality, HIV incidence, immunization) plus region. Choosing No predicts "
+         "(adult mortality, infant and under-five deaths, HIV incidence) plus region. Choosing No predicts "
          "from basic economic and demographic figures only. Full input lists are under "
          "“Model specification and data caveats” on the Methodology tab.",
     horizontal=True,
@@ -272,146 +306,125 @@ if submitted:
                     f"true values) · typical miss {model_info['rmse']:.2f} years on held-out test data")
 
 
-section(tab_meth, "Method", "How the model was built",
-        "Clean, split 80/20, engineer features on the training set only, fit, evaluate once on "
-        "held-out data. Every figure below comes from the 20% of records the models never saw.")
-tab_meth.markdown(f"""
-| Candidate model | Inputs | Typical error, training | Typical error, held-out |
-|---|---|---|---|
-| Every candidate input | 25 | 1.06 years | 1.07 years |
-| Dropped by correlation, by hand | 22 | 1.07 years | 1.09 years |
-| Pruned by variance inflation (VIF) | 15 | 1.08 years | 1.09 years |
-| **Stepwise selection, used by this app** | **16** | **1.06 years** | **{err_full:.2f} years** |
-""")
-tab_meth.caption("Every input we removed was judged on held-out error rather than assumed. VIF is a "
-                 "standard test for inputs that duplicate each other; here it removed an input the "
-                 "held-out data said was worth keeping. Stepwise selection matched the full model "
-                 "using 16 of 25 inputs, comfortably inside the 1.8-year benchmark set by the "
-                 "rival contractor team. Error is root mean squared "
-                 "error (RMSE), reproduced in the analysis notebook.")
+# ============================ METHODOLOGY ============================
+# Band 1: what each consent tier costs in accuracy.
+section(tab_meth, "The trade", "What sharing more buys you")
+stat_row(tab_meth, [
+    stat("Minimal", f"{err_min:.2f}", "yrs off"),
+    stat("Ranges", f"{err_crs:.2f}", "yrs off"),
+    stat("Full", f"{err_full:.2f}", "yrs off"),
+    stat("Target to beat", f"{TARGET:.2f}", "yrs"),
+], key="tiers")
 
-section(tab_meth, "Investigation", "What the data showed, and what we did about it",
-        "Every drop below started as an observation in the data, not a preference. None was "
-        "acted on until the cost had been measured on held-out records.")
-tab_meth.markdown(f"""
+ladder = pd.DataFrame({
+    "tier": ["Economy, GDP, schooling", "Plus mortality deciles", "Plus exact health figures"],
+    "years": [err_min, err_crs, err_full],
+    "shipped": ["no", "no", "yes"],
+})
+ladder["label"] = ladder["years"].map(lambda v: f"{v:.1f} years")
+# direct value labels replace the axis entirely: three bars need no gridlines
+ladder_bars = alt.Chart(ladder).mark_bar(height=26).encode(
+    x=alt.X("years", axis=None, scale=alt.Scale(domain=[0, 6.6])),
+    y=alt.Y("tier", sort=None, title=None),
+    color=alt.condition(alt.datum.shipped == "yes", alt.value("#00205C"), alt.value("#0093D5")),
+)
+ladder_labels = alt.Chart(ladder).mark_text(align="left", dx=6, color="#00205C", fontSize=13).encode(
+    x="years", y=alt.Y("tier", sort=None), text=alt.Text("label"))
+bar_target = pd.DataFrame({"years": [TARGET], "label": [f"{TARGET:.1f} target"]})
+target_rule = alt.Chart(bar_target).mark_rule(color="#6E7C99", strokeDash=[4, 4]).encode(x="years")
+target_label = alt.Chart(bar_target).mark_text(
+    align="left", baseline="top", dx=6, dy=2, color="#5C6F94", fontSize=11, fontWeight=700,
+).encode(x="years", y=alt.value(0), text="label")
+tab_meth.altair_chart(
+    (ladder_bars + ladder_labels + target_rule + target_label).properties(height=190).configure_axis(
+        labelColor="#45577D", titleColor="#00205C", domainColor="#B9C0D0",
+        labelFontSize=12, titleFontSize=13, labelLimit=280,
+    ).configure_view(strokeOpacity=0),
+    use_container_width=True)
+# the share of the minimal-to-full gap that ranges recover, from the live tier errors
+gap_closed = (err_min - err_crs) / (err_min - err_full)
+tab_meth.caption(f"Ranges close {gap_closed:.0%} of the gap. Only full clears the {TARGET:.1f} target.")
+
+# Band 2: why the tiers differ. The mortality pair is how WHO derives the answer.
+section(tab_meth, "Why the tiers differ", f"Two of {CANDIDATES} columns do 98% of the work")
+tab_meth.markdown(
+    '<div class="strip">'
+    '<span class="lab">Adult mortality <sub>45</sub>q<sub>15</sub></span><span class="op">+</span>'
+    '<span class="lab">Under-five deaths <sup>5</sup>q<sub>0</sub></span><span class="op">&#8594;</span>'
+    '<span class="lab">WHO model life table</span><span class="op">&#8594;</span>'
+    '<span class="lab">Life expectancy</span></div>', unsafe_allow_html=True)
+# 97.7, 90.2, 1.23, 2.80 and the 0.22 below are notebook output (FINDINGS.md
+# section 2, circularity). They describe cut-down models this app never fits,
+# so they are literals rather than live figures.
+stat_row(tab_meth, [
+    stat("Those two columns alone", "97.7", "% explained", "1.23 years off, unseen country"),
+    stat("Mortality removed", "90.2", "% explained", "2.80 years off, unseen country", muted=True),
+], key="circularity", hero=True)
+tab_meth.caption("These two inputs are what WHO uses to calculate life expectancy. The other "
+                 f"{CANDIDATES - 2} columns add 0.22 years.")
+
+# Band 3: how the shipped input list was chosen.
+n_inputs_full = metrics["n_features"]
+section(tab_meth, "", f"{n_inputs_full} inputs kept, {CANDIDATES - n_inputs_full} dropped")
+stat_row(tab_meth, [
+    stat("Stepwise &middot; shipped", f"{n_inputs_full}",
+         f"of {CANDIDATES} &middot; {err_full:.2f} yrs", "Does it earn its place?"),
+    stat("Variance inflation &middot; rejected", "15",
+         f"of {CANDIDATES} &middot; 1.09 yrs", "Does it repeat another?"),
+], key="selection")
+tab_meth.caption("Stepwise made the picks after targeted transforms: logged population made the cut, "
+                 "hepatitis B dropped out. VIF dropped infant deaths, which the held-out data keeps.")
+
+with tab_meth.expander("What the data showed"):
+    st.markdown("Every drop below started as an observation in the data, not a preference. None was "
+                "acted on until the cost had been measured on held-out records.")
+    st.markdown(f"""
 | What we found | What we did | What it cost |
 |---|---|---|
 | Economy status recorded twice, as exact opposites (r = &minus;1.00) | Kept one. Two columns carrying one fact break the regression | Nothing, and unavoidable |
 | Infant and under-five deaths move as one (r = 0.99): the second contains the first | Flagged as duplicates, then let selection decide. It kept both | Nothing: each still adds signal |
 | Diphtheria and polio immunisation move together (r = 0.95) | Selection rejected both once mortality was in the model | Nothing measurable |
 | The two child-thinness measures move together (r = 0.94) | Selection rejected both | Nothing measurable |
-| Country is an identifier, 179 of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: pooled error {loco_pooled:.2f} vs {err_full:.2f} on a random split |
+| Country is an identifier, {prov['countries']} of them | Excluded. The model would learn countries rather than relationships | Checked by holding out whole countries: pooled error {loco_pooled:.2f} vs {err_full:.2f} on a random split |
 | Filled values: measles reads 64 in 17% of records, coverage never exceeds 99 | Kept, but flagged. Predictions are fine; those coefficients are not causes | Nothing measurable |
 """)
-tab_meth.caption("Correlation alone was never the deciding tool. It only sees pairs, it does not say "
-                 "which of a pair to keep, and it cannot measure what a drop costs.")
+    st.caption("Correlation alone was never the deciding tool. It only sees pairs, it does not say "
+               "which of a pair to keep, and it cannot measure what a drop costs.")
 
-section(tab_meth, "Selection", "How the 16 inputs were chosen",
-        "Two standard tools were run on the training data, and they disagreed.")
-tab_meth.markdown("""
+with tab_meth.expander("Model specification and data caveats"):
+    st.markdown(f"""
+**How it was built.** Clean, split 80/20, engineer features on the training set only, fit, evaluate
+once on held-out data. Every figure on these tabs comes from the 20% of records the models never saw.
+Error is root mean squared error (RMSE), reproduced in the analysis notebook.
+
+**Candidate models**
+
+| Candidate model | Inputs | Typical error, training | Typical error, held-out |
+|---|---|---|---|
+| Every candidate input | {CANDIDATES} | 1.06 years | 1.07 years |
+| Dropped by correlation, by hand | 22 | 1.07 years | 1.09 years |
+| Pruned by variance inflation (VIF) | 15 | 1.08 years | 1.09 years |
+| **Stepwise selection, used by this app** | **{n_inputs_full}** | **{train_err:.2f} years** | **{err_full:.2f} years** |
+
+The three candidate rows are notebook output from the selection pass; the shipped row is computed
+live by this app. Every input we removed was judged on held-out error rather than assumed.
+
+**How the inputs were chosen.** Two standard tools were run on the training data, and they disagreed.
+
 |  | Stepwise selection | Variance inflation (VIF) |
 |---|---|---|
 | **The question it asks** | Does this input earn its place? | Does this input repeat another? |
 | **How it decides** | Adds the strongest, drops any that stop earning their place | Removes anything scoring above 5 |
-| **Inputs kept** | 16 of 25 | 15 of 25 |
-| **What it removed** | Measles, polio, diphtheria, population, GDP per capita, both thinness measures, two region flags | Infant deaths, which the held-out data says is worth keeping |
-| **Typical error** | **1.08 years** | 1.09 years |
+| **Inputs kept** | {n_inputs_full} of {CANDIDATES} | 15 of {CANDIDATES} |
+| **What it removed** | Measles, polio, diphtheria, hepatitis B, GDP per capita, both thinness measures, two region flags | Infant deaths, which the held-out data says is worth keeping |
+| **Typical error** | **{err_full:.2f} years** | 1.09 years |
 | **Verdict** | **Shipped** | Rejected |
-""")
-tab_meth.caption("The weakest input stepwise kept, hepatitis B immunisation, still clears the "
-                 "significance bar at p = 0.002, so nothing in the shipped model is borderline. "
-                 "Neither tool answers the question that actually matters, which is whether "
-                 "removing an input makes predictions worse, so every candidate set was refitted "
-                 "and scored on records the models had never seen.")
 
+All {n_inputs_full} inputs are significant at p &lt; 0.01, and the weakest, {weakest_input}, sits at
+p = {weakest_p:.3f}, so nothing in the shipped model is borderline. Neither tool answers the question
+that actually matters, which is whether removing an input makes predictions worse, so every candidate
+set was refitted and scored on records the models had never seen.
 
-section(tab_perf, "Reliability", "Accuracy on unseen data")
-tab_perf.markdown(
-    '<div class="prov">'
-    f'<div><span class="prov-k">Typical error</span><span class="prov-v">{err_full:.2f} years on '
-    'records the model never saw</span></div>'
-    f'<div><span class="prov-k">Country never seen</span><span class="prov-v">{metrics["loco_mean"]:.2f} '
-    'years, leave-one-country-out</span></div>'
-    f'<div><span class="prov-k">Differences explained</span><span class="prov-v">{metrics["r2"]:.1%} '
-    'of the variation between countries</span></div>'
-    f'<div><span class="prov-k">Stability</span><span class="prov-v">{metrics["cv_mean"]:.2f} &plusmn; '
-    f'{metrics["cv_sd"]:.2f} years across five refits</span></div>'
-    '</div>'
-    '<p class="sec-intro">Held-out records share countries with the training data, so as a stricter '
-    'check, the model was refit with one whole country held out at a time (leave-one-country-out, '
-    f'{metrics["loco_n"]} refits). For a country the model has <strong>never seen</strong>, the '
-    f'average country scores <strong>{metrics["loco_mean"]:.2f} years</strong> of error '
-    f'(median {metrics["loco_median"]:.2f}); pooled across every prediction it is '
-    f'<strong>{loco_pooled:.2f} years</strong>, barely above the {err_full:.2f} years measured on '
-    f'the ordinary random split (mean absolute error {metrics["mae"]:.2f} years), and '
-    f'{metrics["loco_under_1"]} of {metrics["loco_n"]} countries score under a year of error. The '
-    'model learned relationships between indicators, not the identities of particular countries. '
-    f'For scale, guessing each country from its own historical average would miss by '
-    f'<strong>{metrics["baseline_country_mean"]:.2f} years</strong>; the model misses by {err_full:.2f}. '
-    f'Every one of the {metrics["n_features"]} inputs earns its place statistically (p &lt; 0.05). '
-    'The percentage above is R&sup2;, and most of the variation it rewards is difference between '
-    'countries, so the leave-one-country-out check is the harder test.</p>',
-    unsafe_allow_html=True)
-# equal width and height: a parity plot only reads correctly when the
-# "perfect prediction" line sits at 45 degrees
-TICKS = [40, 50, 60, 70, 80, 90]
-axis_scale = alt.Scale(domain=[35, 90], nice=False)
-diagonal = pd.DataFrame({"actual": [35, 90], "predicted": [35, 90]})
-points = alt.Chart(data["scatter"]).mark_circle(size=30, opacity=0.55, color="#007EB4").encode(
-    x=alt.X("actual", scale=axis_scale, title="Actual (years)", axis=alt.Axis(values=TICKS)),
-    y=alt.Y("predicted", scale=axis_scale, title="Predicted (years)", axis=alt.Axis(values=TICKS)),
-)
-diag_line = alt.Chart(diagonal).mark_line(color="#00205C", strokeDash=[5, 4], size=1.5).encode(
-    x=alt.X("actual", scale=axis_scale), y=alt.Y("predicted", scale=axis_scale))
-tab_perf.altair_chart(
-    (points + diag_line).properties(width=430, height=430).configure_axis(
-        labelColor="#45577D", titleColor="#00205C", gridColor="#EBEEF4",
-        domainColor="#B9C0D0", labelFontSize=12, titleFontSize=13,
-    ).configure_view(strokeOpacity=0),
-    use_container_width=False)
-tab_perf.caption("Each dot is one held-out country-year, against the dashed line of perfect "
-                 "prediction. Points hug the line across the whole range, so accuracy holds at "
-                 "both ends and not just in the middle.")
-
-section(tab_perf, "In practice", "Three countries from the test set, 2015")
-examples_header = ("| Country | Actual 2015 | Full model | Minimal model |\n|---|---|---|---|\n")
-examples_rows = "\n".join(
-    f"| {r['Country']} | {r['Actual 2015']} | {r['Full model']} | {r['Minimal model']} |"
-    for _, r in data["examples"].iterrows())
-tab_perf.markdown(examples_header + examples_rows)
-tab_perf.caption("The full model lands within about a year in each case; the minimal model, denied "
-                 "the health figures, is several years out on the harder countries.")
-
-section(tab_meth, "Data sharing", "Accuracy at each consent tier")
-ladder = pd.DataFrame({
-    "tier": ["Basic figures only", "Ranges for sensitive figures", "Exact health figures"],
-    "years": [round(err_min, 1), round(err_crs, 1), round(err_full, 1)],
-    "built": ["in this app", "in this app", "in this app"],
-})
-ladder["label"] = ladder["years"].map(lambda v: f"{v:.1f} years")
-# direct value labels replace the axis entirely: four bars need no gridlines
-ladder_bars = alt.Chart(ladder).mark_bar(height=24).encode(
-    x=alt.X("years", axis=None, scale=alt.Scale(domain=[0, 6.6])),
-    y=alt.Y("tier", sort=None, title=None),
-    color=alt.condition(alt.datum.built == "in this app",
-                        alt.value("#00205C"), alt.value("#0093D5")),
-)
-ladder_labels = alt.Chart(ladder).mark_text(align="left", dx=6, color="#00205C", fontSize=13).encode(
-    x="years", y=alt.Y("tier", sort=None), text=alt.Text("label"))
-tab_meth.altair_chart(
-    (ladder_bars + ladder_labels).properties(height=190).configure_axis(
-        labelColor="#45577D", titleColor="#00205C", domainColor="#B9C0D0",
-        labelFontSize=12, titleFontSize=13, labelLimit=280,
-    ).configure_view(strokeOpacity=0),
-    use_container_width=True)
-tab_meth.caption("Shorter bar means a more accurate estimate. Sharing more raises accuracy sharply "
-                 "at first: naming the band a country falls in, rather than the measured figure, "
-                 "recovers most of the gain for a fraction of the disclosure. All three tiers are "
-                 "offered by the estimator.")
-
-with tab_meth.expander("Model specification and data caveats"):
-    st.markdown(
-        """
 **Why three models?** Some WHO indicators (mortality, disease incidence) are more sensitive
 than basic demographic and economic figures. Rather than force an all-or-nothing choice, the
 estimator offers three levels of disclosure and shows what each one costs in accuracy.
@@ -424,15 +437,103 @@ eight region flags, plus adult mortality, under-five deaths and HIV incidence gi
 positions (tenths of the training distribution) rather than measured values. Decile boundaries are
 learned from the training data only.
 
-**Full model (16 inputs):** Infant deaths (log-transformed), Under-five deaths, Adult mortality
-(square-root transformed), Economy status, Schooling, BMI, Year, HIV incidence, Hepatitis B
-immunization, Alcohol consumption, and six region flags. GDP per capita was not selected.
+**Full model ({n_inputs_full} inputs):** Infant deaths (log-transformed), Under-five deaths, Adult
+mortality (square-root transformed), Population (log-transformed), Economy status, Schooling, BMI,
+Year, HIV incidence, Alcohol consumption, and six region flags. Stepwise ran after the targeted
+transforms, so logged population made the cut while hepatitis B immunization and GDP per capita
+did not.
 
 Some source columns (e.g. Measles, HIV incidence) contain pre-filled/placeholder values in parts
 of the original dataset, so treat any single feature's effect on the prediction with caution:
 these are correlational, not causal, estimates.
-        """
-    )
+
+**Differences explained** on the Performance tab is R&sup2;, and most of the variation it rewards is
+difference between countries, which is why the leave-one-country-out check is the harder test.
+""")
+
+
+# ============================ PERFORMANCE ============================
+# Band 1: the headline, against the benchmark the model had to clear.
+section(tab_perf, "Against the bar",
+        f"Beats the {TARGET:.1f} target by {(TARGET - err_full) / TARGET:.0%}")
+stat_row(tab_perf, [
+    stat("Typical miss", f"{err_full:.2f}", "yrs"),
+    stat("Country never seen", f"{metrics['loco_mean']:.2f}", "yrs"),
+    stat("Differences explained", f"{metrics['r2'] * 100:.1f}", "%"),
+    stat("Give or take", f"&plusmn;{data['give_take']:.1f}", "yrs"),
+], key="headline")
+tab_perf.caption(f"Average miss {metrics['mae']:.2f} years, and {metrics['cv_mean']:.2f} ± "
+                 f"{metrics['cv_sd']:.2f} years across five refits of the training data.")
+
+# Band 2: the model against the do-nothing baseline and the benchmark.
+section(tab_perf, "", "Half the error of guessing a country's own average")
+baseline = pd.DataFrame({
+    "row": ["Country's own average", "Benchmark to get under", "This model"],
+    "years": [metrics["baseline_country_mean"], TARGET, err_full],
+    "tone": ["naive", "target", "model"],
+})
+baseline["label"] = baseline["years"].map(lambda v: f"{v:.2f} years")
+baseline_bars = alt.Chart(baseline).mark_bar(height=26).encode(
+    x=alt.X("years", axis=None, scale=alt.Scale(domain=[0, 2.9])),
+    y=alt.Y("row", sort=None, title=None),
+    color=alt.Color("tone", legend=None, scale=alt.Scale(
+        domain=["naive", "target", "model"], range=["#0093D5", "#B9C0D0", "#00205C"])),
+)
+baseline_labels = alt.Chart(baseline).mark_text(align="left", dx=6, color="#00205C", fontSize=13).encode(
+    x="years", y=alt.Y("row", sort=None), text=alt.Text("label"))
+tab_perf.altair_chart(
+    (baseline_bars + baseline_labels).properties(height=160).configure_axis(
+        labelColor="#45577D", titleColor="#00205C", domainColor="#B9C0D0",
+        labelFontSize=12, titleFontSize=13, labelLimit=280,
+    ).configure_view(strokeOpacity=0),
+    use_container_width=True)
+tab_perf.caption("Shorter is better. Guessing each country from its own historical average is the "
+                 "do-nothing baseline this has to beat.")
+
+# Band 3: the stricter test, whole countries held out one at a time.
+section(tab_perf, "The harder test", "Never seen the country, still under a year")
+stat_row(tab_perf, [
+    stat("Average country", f"{metrics['loco_mean']:.2f}", "yrs"),
+    stat("Pooled", f"{loco_pooled:.2f}", "yrs"),
+], key="loco", hero=True)
+under_1, loco_n = metrics["loco_under_1"], metrics["loco_n"]
+tab_perf.markdown(
+    f'<div class="split"><i style="width:{under_1 / loco_n:.1%}"></i></div>'
+    f'<div class="splitk"><span>{under_1} of {loco_n} countries under 1 year</span>'
+    f'<span>{loco_n - under_1} above</span></div>', unsafe_allow_html=True)
+tab_perf.caption(f"Refit {loco_n} times, one country removed each time. The median country scores "
+                 f"{metrics['loco_median']:.2f} years.")
+
+# Band 4: the parity plot, paired with three countries from the test set.
+section(tab_perf, "", "Close at both ends of the range")
+chart_col, cards_col = tab_perf.columns([3, 2], gap="large")
+# equal width and height: a parity plot only reads correctly when the
+# "perfect prediction" line sits at 45 degrees
+TICKS = [40, 50, 60, 70, 80, 90]
+axis_scale = alt.Scale(domain=[35, 90], nice=False)
+diagonal = pd.DataFrame({"actual": [35, 90], "predicted": [35, 90]})
+points = alt.Chart(data["scatter"]).mark_circle(size=30, opacity=0.55, color="#007EB4").encode(
+    x=alt.X("actual", scale=axis_scale, title="Actual (years)", axis=alt.Axis(values=TICKS)),
+    y=alt.Y("predicted", scale=axis_scale, title="Predicted (years)", axis=alt.Axis(values=TICKS)),
+)
+diag_line = alt.Chart(diagonal).mark_line(color="#00205C", strokeDash=[5, 4], size=1.5).encode(
+    x=alt.X("actual", scale=axis_scale), y=alt.Y("predicted", scale=axis_scale))
+chart_col.altair_chart(
+    (points + diag_line).properties(width=420, height=420).configure_axis(
+        labelColor="#45577D", titleColor="#00205C", gridColor="#EBEEF4",
+        domainColor="#B9C0D0", labelFontSize=12, titleFontSize=13,
+    ).configure_view(strokeOpacity=0),
+    use_container_width=False)
+# one line per country, straight from the live example predictions
+cards = "".join(
+    f'<div class="excard"><span class="lab">{r["Country"]}</span>'
+    f'<span class="exline">{r["Actual 2015"]:.1f} actual &middot; '
+    f'<b>{r["Full model"]:.1f} full</b> &middot; {r["Minimal model"]:.1f} minimal</span></div>'
+    for _, r in data["examples"].iterrows())
+cards_col.markdown(f'<span class="lab hd">Test set, 2015</span>{cards}', unsafe_allow_html=True)
+tab_perf.caption("One dot per held-out country-year, against the dashed line of perfect prediction. "
+                 "Points hug the line across the whole range, so accuracy holds at both ends.")
+
 
 st.markdown('<p class="foot">Independent educational project, not affiliated with or endorsed by '
             'the World Health Organization. Generative AI was used to build parts of this app; it '
