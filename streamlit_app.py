@@ -298,21 +298,41 @@ n_inputs = len(plan["numbers"]) + len(plan["bands"]) + 1 + bool(plan["economy"])
 section(tab_est, "Step 2", "Enter the indicators",
         f"{n_inputs} entries: {FORM_INTRO[tier]}. Every field starts at the dataset median, so change only the ones you know.")
 
+# Lithuania, 2015: a real test-set row, used to prefill the form on demand.
+DEMO_COUNTRY = {"Year": 2015, "Economy status": "Developed", "Region": "European Union",
+                "Adult_mortality": 165.2, "Under_five_deaths": 4.9, "Alcohol_consumption": 14.2,
+                "BMI": 26.4, "Schooling": 13.0, "Incidents_HIV": 0.09, "Infant_deaths": 4.0,
+                "Population_mln": 2.9, "GDP_per_capita": 14264.0}
+
+if tab_est.button("Try a real country (Lithuania, 2015)"):
+    st.session_state["in_year"] = DEMO_COUNTRY["Year"]
+    st.session_state["in_economy"] = DEMO_COUNTRY["Economy status"]
+    st.session_state["in_region"] = DEMO_COUNTRY["Region"]
+    for colname in plan["numbers"]:
+        s_col = stats[colname]
+        val = DEMO_COUNTRY.get(colname, s_col["median"])
+        st.session_state[f"in_{colname}"] = min(max(val, s_col["min"]), s_col["max"])
+    for colname in plan["bands"]:
+        edges = fitted[tier]["middles"][colname]["edges"]
+        idx = int(pd.cut([DEMO_COUNTRY[colname]], edges, labels=False)[0])
+        st.session_state[f"in_band_{colname}"] = band_options(edges)[idx]
+
+
 # --- FORM ---
 with tab_est.form("predict_form"):
-    year = st.slider("Year", prov["year_min"], prov["year_max"], value=int(round(stats["Year"]["median"])))
+    year = st.slider("Year", prov["year_min"], prov["year_max"], value=int(round(stats["Year"]["median"])), key="in_year")
 
     col_a, col_b = st.columns(2, gap="medium")
-    economy = col_a.selectbox("Economy status", ["Developed", "Developing"]) if plan["economy"] else None
+    economy = col_a.selectbox("Economy status", ["Developed", "Developing"], key="in_economy") if plan["economy"] else None
     region_help = ("The model separates some regions; the rest share a common baseline."
                    if plan["regions"] and len(plan["regions"]) < len(REGIONS) - 1 else None)
-    region = col_b.selectbox("Region", REGIONS, help=region_help) if plan["regions"] else None
+    region = col_b.selectbox("Region", REGIONS, help=region_help, key="in_region") if plan["regions"] else None
 
     number_answers = {}
     for i, colname in enumerate(plan["numbers"]):
         s_col = stats[colname]
         target = col_a if i % 2 == 0 else col_b
-        number_answers[colname] = target.number_input(field_label(colname), min_value=s_col["min"], max_value=s_col["max"], value=s_col["median"])
+        number_answers[colname] = target.number_input(field_label(colname), min_value=s_col["min"], max_value=s_col["max"], value=s_col["median"], key=f"in_{colname}")
 
     band_answers = {}
     if plan["bands"]:
@@ -321,7 +341,7 @@ with tab_est.form("predict_form"):
         for slot, colname in zip(slots, plan["bands"]):
             middle = model_info["middles"][colname]
             options = band_options(middle["edges"])
-            chosen = options.index(slot.selectbox(field_label(colname), options, index=1))
+            chosen = options.index(slot.selectbox(field_label(colname), options, index=1, key=f"in_band_{colname}"))
             band_answers[colname] = middle["value"][chosen]
 
     submitted = st.form_submit_button("Predict life expectancy")
