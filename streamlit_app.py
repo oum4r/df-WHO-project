@@ -145,6 +145,9 @@ st.set_page_config(page_title="Meridian · Life expectancy estimator", layout="w
 inject_css()
 data = load_data_and_models()
 metrics = live_metrics()
+if "loco_pooled" not in metrics:  # cache from an older evaluate() survived a deploy
+    live_metrics.clear()
+    metrics = live_metrics()
 stats = data["stats"]
 prov = data["provenance"]
 fitted = data["fitted"]
