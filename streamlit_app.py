@@ -474,7 +474,7 @@ p = {weakest_p:.3f}).
     tier_specs = [
         ("minimal", "Least information", "Year, economy status, GDP per capita raw and logged, "
                                          "schooling, eight region flags. No health data."),
-        ("coarse", "Coarse", "Year, population, schooling raw and logged, GDP per capita logged, eight region "
+        ("coarse", "Coarse", "Year, population, schooling raw, GDP per capita logged, eight region "
                              "flags, plus adult mortality, under-five deaths and HIV incidence as "
                              "training-set deciles."),
         ("full", "Elaborate", "Infant deaths logged, under-five deaths, adult mortality "
