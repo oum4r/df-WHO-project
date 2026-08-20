@@ -55,6 +55,7 @@ def minimal_apply(df, state):
     # TODO your transforms (log, drops, ...)
 
     df['GDP_per_capita_log'] = np.log(df['GDP_per_capita'])
+    # df['Schooling_log'] = np.log(df['Schooling'])
 
     df = df[MINIMAL['features']]
 
@@ -95,6 +96,9 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 
     df['GDP_per_capita_log'] = np.log(df['GDP_per_capita'])
     df.drop('GDP_per_capita', axis=1, inplace=True)
+    
+    # df['Schooling_log'] = np.log(df['Schooling'])
+    # df.drop('Schooling', axis=1, inplace=True)
 
     for col in COARSE['band_cols']:
         edges = state['edges'][col]
