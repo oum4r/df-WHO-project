@@ -11,6 +11,7 @@
     --ink-soft: #5C6F94;   /* 5.1:1  */   --line-2:   #6E7C99;  /* 4.2:1, controls */
     --line: rgba(0, 32, 92, 0.13);
     --grid: #EBEEF4;       /* unfilled track behind a proportion bar */
+    --ghost: #B9C0D0;      /* a bar that is context rather than a result */
     --sans:  "Noto Sans", Arial, Helvetica, sans-serif;
     --serif: "Noto Serif", Georgia, "Times New Roman", serif;
 }
@@ -25,8 +26,9 @@
 /* flat brand rule (replaces the old blue-to-blue gradient bar) */
 [data-testid="stAppViewContainer"]::before { content: ""; position: fixed; top: 0;
     left: 0; right: 0; height: 3px; background: var(--who-blue); z-index: 1000; }
-/* 60rem, not 54: four stats in a row and the 420px parity plot need the width */
-[data-testid="stMainBlockContainer"] { max-width: 60rem; padding: 2.5rem 3rem 3.25rem; }
+/* 80rem with 4rem of side padding: a 19/47 label rail needs a 1152px content
+   column before the rail reaches its 19rem width */
+[data-testid="stMainBlockContainer"] { max-width: 80rem; padding: 2.5rem 4rem 5rem; }
 
 /* ---- sidebar: identity only, logo leads ---------------------- */
 [data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid var(--line); }
@@ -63,7 +65,7 @@ p.lead { font: 400 1.0625rem/1.65 var(--sans); color: var(--ink-mid); max-width:
 .prov-k { display: block; line-height: 1.5; margin-bottom: 0.2rem; }
 .prov-v { display: block; font: 400 0.875rem/1.5 var(--sans); color: var(--ink-mid); }
 
-/* ---- section headers ----------------------------------------- */
+/* ---- section headers (Estimator tab) ------------------------- */
 .sec { margin: 2.75rem 0 0.25rem; }
 .sec h2 { font: 600 1.5rem/1.25 var(--serif); color: var(--ink); margin: 0 0 0.5rem; padding: 0; }
 /* specificity beats Streamlit's own paragraph rule, which otherwise wins */
@@ -124,49 +126,131 @@ label[data-testid="stWidgetLabel"] { width: fit-content !important; gap: 0.4rem;
 [data-testid="stExpander"] summary p { font-size: 0.8125rem !important; letter-spacing: 0.04em; }
 [data-testid="stExpanderDetails"] p, [data-testid="stExpanderDetails"] li { font: 400 0.875rem/1.65 var(--sans); color: var(--ink-mid); }
 [data-testid="stExpanderDetails"] strong { color: var(--ink); }
-.foot { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1rem;
+.foot { border-top: 1px solid var(--line); margin-top: 3.5rem; padding-top: 1rem;
     font: 400 0.6875rem/1.6 var(--sans); font-size: 0.6875rem !important; color: var(--ink-soft); }
 
-/* ---- methodology and performance bands ----------------------- */
+/* ---- Methodology and Performance: label-rail bands ----------- */
+/* Every band is one row: heading and caption in a fixed left rail, the visual
+   in the body. A hairline element carries the rule plus the 64px of space
+   above it; the band's own 60px of top padding sits below it, so consecutive
+   band content lands 124px apart. Streamlit's own vertical gap is switched
+   off inside these two tabs so the margins above are the only spacing. */
+.st-key-methbody, .st-key-perfbody { gap: 0 !important; }
+/* padding rather than margin: Streamlit's element wrapper does not grow to
+   contain a child margin, and the 64px would be swallowed */
+.railband-rule { padding-top: 4rem; border-bottom: 1px solid var(--line); }
+/* Streamlit pulls every markdown block up by 1rem to absorb the paragraph
+   margin it adds. None of the blocks below carry that margin, so the pull
+   would eat 16px out of each measured gap. */
+[class*="st-key-band_"] [data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"]:has(> .railband-rule) { margin-bottom: 0 !important; }
+/* Streamlit slips a stLayoutWrapper between a container and its column row, so
+   the rail gap has to be reached through it as well as directly. */
+[class*="st-key-band_"] { padding-top: 3.75rem; gap: 0 !important; }
+[class*="st-key-band_"] > [data-testid="stHorizontalBlock"],
+[class*="st-key-band_"] > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+    gap: 5.5rem !important; }
+[class*="st-key-band_"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"] { gap: 0 !important; }
+[data-testid="stMarkdownContainer"] .rail h2, .rail h2 {
+    font: 600 1.375rem/1.35 var(--serif); color: var(--ink);
+    letter-spacing: -0.005em; margin: 0; padding: 0; }
+[data-testid="stMarkdownContainer"] .rail p.cap, .rail p.cap {
+    font-family: var(--sans); font-size: 0.8125rem; font-weight: 400; line-height: 1.8;
+    color: var(--ink-mid); margin: 1.1rem 0 0; max-width: 70ch; }
+.rail p.cap strong { color: var(--ink); font-weight: 600; }
+
+/* ---- stat rows ----------------------------------------------- */
 /* Three type sizes plus the shared micro label: the display number (.num),
-   the section heading, and body copy. Grouping is whitespace and one hairline
-   per row, so the cells themselves carry no fill and no border. */
-.lab { display: block; font: 700 0.6875rem/1.4 var(--sans); letter-spacing: 0.1em;
+   the section heading, and body copy. Grouping is whitespace and the band's
+   own hairline, so the cells themselves carry no fill and no border. */
+.lab { display: block; font: 700 0.6875rem/1.45 var(--sans); letter-spacing: 0.1em;
     text-transform: uppercase; color: var(--ink-soft); margin: 0 0 0.5rem; }
 .lab.hd { margin-bottom: 0.9rem; }
 .num { display: block; font: 600 2.5rem/1.05 var(--serif); color: var(--ink);
     font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
 .num .u { font: 600 0.875rem/1 var(--sans); color: var(--ink-mid);
     letter-spacing: 0; margin-left: 0.35rem; }
-.stat .sub { display: block; font: 400 0.8125rem/1.5 var(--sans);
-    color: var(--ink-mid); margin-top: 0.55rem; }
+.stat .lab { margin-bottom: 0.7rem; }
+.stat .sub { display: block; font: 400 0.8125rem/1.7 var(--sans);
+    color: var(--ink-mid); margin-top: 0.8rem; }
 
-/* one hairline per stat row, on the keyed container rather than the cells, so
-   it runs unbroken behind the column gaps */
-[class*="st-key-statrow"] { border-top: 1px solid var(--line); padding-top: 1.35rem; }
+/* a row set by its position in the band: leading rows sit straight under the
+   band rule, following rows clear the block above them, the hero pair gets
+   real air on both sides. Order matters, the later rules refine the first. */
+[class*="st-key-statrow"] { padding-top: 2rem; }
+[class*="st-key-statrow"] [data-testid="stHorizontalBlock"] { gap: 4rem !important; }
+[class*="st-key-statrowlead"] { padding-top: 0; }
 /* the hero pair is the only oversized number on a tab: emphasis capped at two */
+[class*="st-key-statrowhero"] { padding: 2rem 0 1.25rem; }
 [class*="st-key-statrowhero"] .num { font-size: 3.5rem; }
+[class*="st-key-statrowhero"] .stat .sub { margin-top: 1rem; }
 [class*="st-key-statrowhero"] .stat.off .num { color: var(--ink-soft); }
 
+/* charts in a band body: a leading chart sits under the rule, a following one
+   clears the stat row above it */
+[class*="st-key-chart_"] { margin-top: 2.75rem; }
+[class*="st-key-chartlead_"] { margin-top: 0.4rem; }
+
 /* circularity chain: labels and arrows on one line, hairline top and bottom */
-.strip { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1.1rem;
-    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.7rem 0; }
+.strip { display: flex; align-items: center; flex-wrap: wrap; gap: 0.55rem 1.4rem;
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0.9rem 0; }
 .strip .lab { margin: 0; color: var(--ink); }
 .strip .op { font: 400 0.875rem/1 var(--sans); color: var(--line-2); }
 
 /* share of countries under a year of error: one filled bar, two readouts */
-.split { display: flex; height: 30px; background: var(--grid); }
+.split { display: flex; height: 30px; margin-top: 3rem; background: var(--grid); }
+.split.slim { height: 22px; margin-top: 2.75rem; }
 .split i { display: block; height: 100%; background: var(--ink); }
-.splitk { display: flex; justify-content: space-between; margin-top: 0.55rem;
+.splitk { display: flex; justify-content: space-between; margin-top: 0.75rem;
     font: 400 0.8125rem/1.5 var(--sans); color: var(--ink-mid); }
 
-/* worked examples beside the parity plot: one hairline row per country */
-.excard { border-top: 1px solid var(--line); padding: 0.7rem 0 0.8rem; }
-.excard .lab { color: var(--ink); margin-bottom: 0.3rem; }
-.exline { font: 400 0.875rem/1.5 var(--sans); color: var(--ink-mid);
-    font-variant-numeric: tabular-nums; }
-.exline b { color: var(--ink); font-weight: 600; }
+/* ---- the parity band ----------------------------------------- */
+/* Heading and caption run across the top, then the plot and the country panel.
+   The plot is fixed width and centred, so it has air on both sides instead of
+   stretching; the country panel is the larger of the two. */
+.st-key-band_parity > [data-testid="stHorizontalBlock"],
+.st-key-band_parity > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+    gap: 5rem !important; margin-top: 3rem; }
+/* the fixed-width plot is wrapped twice by Streamlit; the inner block is what
+   has to be centred for the chart to keep air on both sides of its column */
+.st-key-band_parity [data-testid="stFullScreenFrame"] > div {
+    margin-left: auto; margin-right: auto; }
+.ct-r { display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr; gap: 2.25rem; align-items: end;
+    border-bottom: 1px solid var(--line); padding: 1.55rem 0; }
+.ct-r.h { padding: 0 0 0.9rem; border-bottom: 1px solid var(--line-2); }
+.ct-r.h span { font: 700 0.6875rem/1.4 var(--sans); letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-soft); text-align: right; }
+.ct-r.h span:first-child { text-align: left; }
+.ct-r:last-child { border-bottom: none; }
+.ct-c { font: 600 1rem/1.3 var(--sans); color: var(--ink); }
+.ct-n { font-family: var(--serif); font-weight: 600; font-size: 1.75rem; line-height: 1;
+    font-variant-numeric: tabular-nums; color: var(--ink); text-align: right; }
+.ct-n.q { color: var(--ink-soft); }
+.ct-n small { display: block; font: 400 0.75rem/1.4 var(--sans); color: var(--ink-mid);
+    margin-top: 0.5rem; }
 
+/* ---- the two Methodology expanders --------------------------- */
+.st-key-methexp { margin-top: 4rem; gap: 1.5rem !important; }
+.st-key-methexp [data-testid="stExpander"] { margin-top: 0; }
+/* the model specification runs three columns, one per consent tier */
+[data-testid="stExpanderDetails"] [data-testid="stHorizontalBlock"] { gap: 4rem !important; }
+[data-testid="stExpanderDetails"] p.expcol { font-size: 0.8125rem; line-height: 1.8; margin: 0; }
+[data-testid="stExpanderDetails"] .lab { margin-bottom: 0.7rem; }
+
+/* below the width the mock was drawn at, the plot and the country panel close
+   up before anything else does: the plot itself is a fixed size */
+@media (max-width: 1360px) {
+    .st-key-band_parity > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+        gap: 3rem !important; }
+}
+@media (max-width: 1200px) {
+    [data-testid="stMainBlockContainer"] { padding: 2.5rem 2.5rem 4rem; }
+    [class*="st-key-band_"] > [data-testid="stHorizontalBlock"],
+    [class*="st-key-band_"] > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+        gap: 3rem !important; }
+    .st-key-band_parity > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+        gap: 2.5rem !important; }
+}
 @media (max-width: 640px) {
     [data-testid="stMainBlockContainer"] { padding: 1.5rem 1.1rem 2.5rem; }
     h1.title { font-size: 2.125rem; }

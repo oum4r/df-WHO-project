@@ -36,7 +36,7 @@ BAND_COLS = ["Adult_mortality", "Under_five_deaths", "Incidents_HIV"]
 # Owner: Bradley H.
 # ===========================================================================
 MINIMAL = {
-    "label": "Minimal model",
+    "label": "Least information model",
     "features": ['Schooling', 'GDP_per_capita_log', 'Region_Asia',
        'Region_Central America and Caribbean', 'Region_South America', 'Year',
        'Region_Rest of Europe', 'Region_European Union', 'Region_Middle East',
@@ -66,7 +66,7 @@ def minimal_apply(df, state):
 # Owner: Bradley H.
 # ===========================================================================
 COARSE = {
-    "label": "Ranges model",
+    "label": "Coarse model",
     "features": ['Year', 'Population_mln', 'Schooling', 'Adult_mortality',
        'Under_five_deaths', 'Incidents_HIV', 'Region_Asia',
        'Region_Central America and Caribbean', 'Region_European Union',
@@ -110,7 +110,7 @@ def coarse_apply(df:pd.DataFrame, state:dict) -> pd.DataFrame:
 # Owner: Harun
 # ===========================================================================
 FULL = {
-    "label": "Full model",
+    "label": "Elaborate model",
     # sel from the elaborate notebook: stepwise on p-values cut 25 columns to
     # these 16, selected by stepwise with Infant_deaths and Population_mln
     # logged and Adult_mortality square-rooted first (see full_apply).
