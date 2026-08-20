@@ -304,9 +304,9 @@ with tab_est.form("predict_form"):
 
     col_a, col_b = st.columns(2, gap="medium")
     economy = col_a.selectbox("Economy status", ["Developed", "Developing"]) if plan["economy"] else None
-    region = col_b.selectbox("Region", REGIONS) if plan["regions"] else None
-    if plan["regions"] and len(plan["regions"]) < len(REGIONS) - 1:
-        col_b.caption("The model separates some regions; the rest share a common baseline.")
+    region_help = ("The model separates some regions; the rest share a common baseline."
+                   if plan["regions"] and len(plan["regions"]) < len(REGIONS) - 1 else None)
+    region = col_b.selectbox("Region", REGIONS, help=region_help) if plan["regions"] else None
 
     number_answers = {}
     for i, colname in enumerate(plan["numbers"]):
